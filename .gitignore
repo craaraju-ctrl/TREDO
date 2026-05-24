@@ -1,16 +1,30 @@
-# Rust targets
-/backend/target
-/target
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
 
-# Node / JS targets
-node_modules/
-.turbo/
-dist/
-build/
+# Environment
 .env
-.env.local
+.env*.local
+.env.example
 
-# Logs and databases
+# Logs
 *.log
-*.db
-*.db-journal
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.o
+*.so
+
+# Python
+__pycache__/
+*.pyc
+venv/
