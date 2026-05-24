@@ -1,0 +1,15 @@
+// alert.borsh - Binary schema for Tantra Alerts
+
+enum AlertSeverity {
+    Info,
+    Warning,
+    Critical,
+}
+
+struct TantraAlert {
+    alert_id: String,
+    source: String,
+    severity: AlertSeverity,
+    message: String,
+    timestamp: u64,
+}

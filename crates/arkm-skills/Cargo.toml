@@ -1,0 +1,15 @@
+[package]
+name = "arkm-skills"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true, features = ["sync"] }
+arkm-types = { path = "../arkm-types" }
+arkm-core = { path = "../arkm-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+futures = "0.3"

@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database Layer
+  postgres:
+    image: postgres:15-alpine
+    container_name: arkm-postgres
+    environment:
+      POSTGRES_DB: arkm_vault
+      POSTGRES_USER: sethu_operator
+      POSTGRES_PASSWORD: operator_secure_password_99
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sethu_operator -d arkm_vault"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache Layer
+  redis:
+    image: redis:7-alpine
+    container_name: arkm-redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. Rust Axum Backend Core Server
+  backend:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.backend
+    container_name: arkm-backend
+    environment:
+      - DATABASE_URL=postgres://sethu_operator:operator_secure_password_99@postgres:5432/arkm_vault
+      - REDIS_URL=redis://redis:6379
+      - PORT=8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 4. React SPA & NGINX Web Gateway
+  frontend:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.frontend
+    container_name: arkm-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # 5. Prometheus Performance Scraper
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: arkm-prometheus
+    volumes:
+      - ./deployment/prometheus:/etc/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  # 6. Grafana Metrics Cockpit Visualizer
+  grafana:
+    image: grafana/grafana:latest
+    container_name: arkm-grafana
+    ports:
+      - "9001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,13 @@
+// orderbook.borsh - Binary Object Representation Serializer layout for Orderbooks
+
+struct PriceLevel {
+    price: f64,
+    size: f64,
+}
+
+struct OrderBook {
+    symbol: String,
+    timestamp: u64,
+    bids: Vec<PriceLevel>,
+    asks: Vec<PriceLevel>,
+}

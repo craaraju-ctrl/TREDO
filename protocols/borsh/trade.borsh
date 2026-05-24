@@ -1,0 +1,21 @@
+// trade.borsh - Binary schema for active executing orders and positions
+
+enum OrderSide {
+    Buy,
+    Sell,
+}
+
+enum OrderType {
+    Limit,
+    Market,
+}
+
+struct Trade {
+    trade_id: String,
+    symbol: String,
+    price: f64,
+    size: f64,
+    side: OrderSide,
+    order_type: OrderType,
+    timestamp: u64,
+}

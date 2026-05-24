@@ -1,0 +1,40 @@
+[package]
+name = "arkm-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arkm-server"
+path = "src/main.rs"
+
+[lib]
+name = "arkm_server"
+path = "src/lib.rs"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+chrono = { workspace = true }
+futures = "0.3"
+tower-http = { version = "0.5", features = ["cors"] }
+
+# Internal crates
+arkm-core      = { path = "../crates/arkm-core" }
+arkm-types      = { path = "../crates/arkm-types" }
+arkm-execution  = { path = "../crates/arkm-execution" }
+arkm-intelligence = { path = "../crates/arkm-intelligence" }
+arkm-exchange   = { path = "../crates/arkm-exchange" }
+arkm-tantra     = { path = "../crates/arkm-tantra" }
+arkm-skills     = { path = "../crates/arkm-skills" }
+arkm-data       = { path = "../crates/arkm-data" }
+arkm-journal    = { path = "../crates/arkm-journal" }
+arkm-autotrader = { path = "../crates/arkm-autotrader" }
+arkm-stream    = { path = "../crates/arkm-stream" }
+arkm-learning  = { path = "../crates/arkm-learning" }
+arkm-bridge    = { path = "../crates/arkm-bridge" }

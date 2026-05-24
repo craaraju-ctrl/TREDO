@@ -1,0 +1,12 @@
+[package]
+name = "arkm-execution"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+arkm-types = { path = "../arkm-types" }
+arkm-exchange = { path = "../arkm-exchange" }

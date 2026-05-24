@@ -1,0 +1,9 @@
+[package]
+name = "arkm-tantra"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+arkm-types = { path = "../arkm-types" }
+dashmap = { workspace = true }
+serde = { workspace = true }

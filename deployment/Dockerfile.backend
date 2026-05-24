@@ -1,0 +1,28 @@
+# Stage 1: Builder
+FROM rust:1.75-slim AS builder
+
+WORKDIR /usr/src/arkm
+
+# Install standard compilation utilities
+RUN apt-get update && apt-get install -y pkg-config libssl-dev git && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace specifications and source codes
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY backend ./backend
+COPY protocols ./protocols
+
+# Build highly-optimized release binary
+RUN cargo build --release --bin arkm-server
+
+# Stage 2: Lightweight Runner
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Copy release binary from builder
+COPY --from=builder /usr/src/arkm/target/release/arkm-server /app/arkm-server
+
+EXPOSE 8080
+
+CMD ["/app/arkm-server"]

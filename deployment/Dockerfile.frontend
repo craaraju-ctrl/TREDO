@@ -1,0 +1,31 @@
+# Stage 1: Build
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/arkm
+
+# Copy package configurations
+COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+
+# Clean install packages
+RUN npm ci
+
+# Copy sources
+COPY turbo.json ./
+COPY frontend ./frontend
+
+# Compile production assets
+RUN npm run build:frontend
+
+# Stage 2: Serve & Gateway proxy via NGINX
+FROM nginx:alpine
+
+# Copy enterprise-grade reverse proxy configuration
+COPY deployment/nginx.conf /etc/nginx/nginx.conf
+
+# Copy production web assets
+COPY --from=builder /usr/src/arkm/frontend/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

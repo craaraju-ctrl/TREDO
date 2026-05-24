@@ -1,0 +1,16 @@
+# Rust targets
+/backend/target
+/target
+
+# Node / JS targets
+node_modules/
+.turbo/
+dist/
+build/
+.env
+.env.local
+
+# Logs and databases
+*.log
+*.db
+*.db-journal
