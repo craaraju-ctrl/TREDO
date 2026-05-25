@@ -1,17 +1,25 @@
 # TREDO System Update Report
 
-This document details the architectural upgrades, unified agent models, local LLM integrations, and core system changes made to the TREDO Quantitative Trading Platform.
+This document details the architectural upgrades, unified agent models, local/cloud LLM isolation, webhook confirmations, and core system changes made to the TREDO Quantitative Trading Platform.
 
 ---
 
 ## Key Updates
 
-### 1. Unified Local LLM (Ollama `nemetron:4b`)
-- Removed all legacy external API model models (including nethra-only agent model reference models) to achieve absolute network independence.
-- Integrated a single, high-performance local **Ollama** model running `nemetron:4b` as the sole reasoning engine.
-- Configured local reasoning timeouts and multi-turn session persistence.
+### 1. Dual-Model LLM Isolation (Local & Cloud Split)
+- **Local Ollama Inference (`nemotron-3-nano:4b`)**:
+  - Wired as the execution engine reasoning backend for fast-path execution bots (e.g. Technician Alpha, Portfolio Steward, Market Scout, Sentiment Oracle) inside the 5-Bot Swarm.
+  - Ensures fully private, offline, latency-free trading decisions with no rate limits.
+- **Cloud Gemini Inference (`gemini-2.5-flash`)**:
+  - Reserved strictly for slow-path strategic reasoning, safety-critical assessments, and webhook validations.
+  - Exclusively powers the **Risk Sentinel** bot (`risk_01`), the **Nethra Swarm Coordinator** strategic summaries, and the **cTrading Webhook Safety Lock** confirmations.
 
-### 2. Consolidated Skills Evaluator (`NethraAgent`)
+### 2. cTrading Webhook Safety Lock & Gemini REST Response Formatting Fix
+- Corrected the `GeminiLLM::complete` client in `crates/tredo-intelligence/src/gemini_llm.rs` by removing the hardcoded prompt wrapper.
+- Previously, this wrapper forced the response schema to `{ "conviction": 0.0-1.0, "reasoning": "..." }`, which completely stripped out the `"status"` field (`Approved` or `Rejected`) expected by the cTrading webhook confirmation deserializer.
+- By passing the raw structured prompt directly, the webhook custom confirmation schema is now perfectly respected by Gemini, restoring full functional verification on the webhook pipeline!
+
+### 3. Consolidated Skills Evaluator (`NethraAgent`)
 - Consolidated all **30+ native Rust technical, risk, and portfolio analysis skills** under a global `NethraAgent` skill evaluator:
   - **Technical (23):** RSI, MACD, Bollinger Bands, SMA, EMA, Support & Resistance, Volume, Ichimoku Cloud, ADX, SuperTrend, Parabolic SAR, Keltner Channels, Aroon, Pivot Points, Chandelier Exit, Williams %R, OBV, CMF, Stochastic Oscillator, Donchian Channels, Heikin-Ashi, Market Structure, Cypher Pattern.
   - **Risk (4):** Position Sizing, Value at Risk (VaR), Exposure, Volatility Analysis.

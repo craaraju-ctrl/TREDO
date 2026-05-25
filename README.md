@@ -169,12 +169,25 @@ NGINX is configured with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Or
 
 ---
 
+## Dual-Model LLM Isolation Architecture
+
+To ensure high availability, zero latency-related blocks on trading execution, and bulletproof safety, TREDO uses a **Dual-Model Local/Cloud Split**:
+
+1. **Local Ollama Model (`nemotron-3-nano:4b`)**:
+   - Used for all standard, fast-path execution sub-agents in the 5-Bot Swarm (Technician Alpha, Portfolio Steward, Market Scout, Sentiment Oracle).
+   - Allows fully private, local, and rate-limit-free real-time calculations.
+2. **Cloud Gemini Model (`gemini-2.5-flash`)**:
+   - Used exclusively for high-grade strategic reasoning, safety-critical assessments, and webhook validations.
+   - Powers the **Risk Sentinel** (`risk_01`), the **Nethra Swarm Coordinator** strategic summaries, and the **cTrading Webhook Safety Lock** confirmations.
+
+---
+
 ## Running Locally
 
 ### Prerequisites
 - Rust `>=1.82` (`rustup update`)
 - Node.js `>=18`
-- Ollama (for local LLM inference): `ollama pull nemetron:4b`
+- Ollama (for local LLM inference): `ollama pull nemotron-3-nano:4b`
 
 ### 1. Start the Backend
 ```bash
@@ -203,6 +216,7 @@ npm run dev
 | `POST` | `/api/autotrade/start` | Start the autonomous background trading loop |
 | `POST` | `/api/autotrade/stop` | Pause the autonomous background trading loop |
 | `GET` | `/api/journal/stats` | Retrieve SQLite-persisted trade performance metrics |
+| `POST` | `/api/webhook/google-trading` | cTrading HFT Webhook endpoint with high-grade Gemini safety lock confirmation |
 | `WS` | `/ws` | Live Level 2 orderbook, decisions, and system alerts WS stream |
 
 ---
@@ -219,12 +233,13 @@ cp .env.example .env
 |----------|-------------|
 | `PORT` | HTTP server port (default: `8080`) |
 | `OLLAMA_BASE_URL` | Local Ollama endpoint (default: `http://localhost:11434`) |
-| `DEFAULT_MODEL` | Active LLM model name (default: `nemetron:4b`) |
+| `DEFAULT_MODEL` | Active local LLM model name (default: `nemotron-3-nano:4b`) |
 | `DATABASE_URL` | SQLite or Postgres connection string (default: `sqlite://tredo.db`) |
 | `BINANCE_API_KEY` | Binance exchange API key |
 | `BINANCE_SECRET_KEY` | Binance exchange secret |
 | `KUCOIN_API_KEY` | KuCoin exchange API key |
 | `KUCOIN_SECRET_KEY` | KuCoin exchange secret |
+| `GEMINI_API_KEY` | Google Gemini Cloud API key (for safety verification locks & risk assessing) |
 
 ---
 
