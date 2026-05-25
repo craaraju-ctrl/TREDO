@@ -62,7 +62,9 @@ impl LRUCache {
     fn set(&mut self, key: String, value: String, ttl: Duration) {
         // Evict if full (remove least recently used)
         if self.store.len() >= self.max_entries {
-            let oldest_key = self.store.iter()
+            let oldest_key = self
+                .store
+                .iter()
                 .min_by_key(|(_, e)| e.last_accessed)
                 .map(|(k, _)| k.clone());
 
@@ -73,15 +75,18 @@ impl LRUCache {
 
         let size = value.len();
         let key_for_entry = key.clone();
-        self.store.insert(key, CacheEntry {
-            key: key_for_entry,
-            value,
-            created_at: Instant::now(),
-            last_accessed: Instant::now(),
-            access_count: 0,
-            ttl,
-            size_bytes: size,
-        });
+        self.store.insert(
+            key,
+            CacheEntry {
+                key: key_for_entry,
+                value,
+                created_at: Instant::now(),
+                last_accessed: Instant::now(),
+                access_count: 0,
+                ttl,
+                size_bytes: size,
+            },
+        );
     }
 
     fn len(&self) -> usize {
@@ -135,7 +140,7 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             l1_max_entries: 500,
-            l2_ttl_secs: 3600,     // 1 hour in Redis
+            l2_ttl_secs: 3600,      // 1 hour in Redis
             l1_ttl_secs: 300,       // 5 minutes in memory
             promotion_threshold: 3, // promoted after 3 accesses
         }
@@ -219,7 +224,10 @@ impl TieredCache {
         }
 
         // Set in L2 (Redis)
-        let _ = self.bridge.cache_set(key, value, self.config.l2_ttl_secs).await;
+        let _ = self
+            .bridge
+            .cache_set(key, value, self.config.l2_ttl_secs)
+            .await;
     }
 
     /// Check if key exists in either tier

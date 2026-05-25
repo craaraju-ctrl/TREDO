@@ -16,9 +16,9 @@
 //               └── Sentiment Analyst (agent + LLM)
 
 pub mod bot;
-pub mod swarm;
 pub mod coordinator;
+pub mod swarm;
 
 pub use bot::{BotRole, SwarmBot, SwarmBotResult};
+pub use coordinator::{CoordinatedOutcome, SwarmAgentProvider, SwarmCoordinator};
 pub use swarm::{BotSwarm, SwarmAnalysis, SwarmBotInfo};
-pub use coordinator::{SwarmCoordinator, CoordinatedOutcome, SwarmAgentProvider};

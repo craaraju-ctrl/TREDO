@@ -97,7 +97,8 @@ impl SkillPerformance {
             } else {
                 -1
             };
-            self.avg_loss_pct = ((self.avg_loss_pct * (self.losing_trades as f64 - 1.0)) + pnl_pct.abs())
+            self.avg_loss_pct = ((self.avg_loss_pct * (self.losing_trades as f64 - 1.0))
+                + pnl_pct.abs())
                 / self.losing_trades as f64;
         }
 
@@ -116,15 +117,15 @@ impl SkillPerformance {
         };
 
         // Update per-regime performance
-        let regime_perf = self
-            .regime_performance
-            .entry(regime.to_string())
-            .or_insert(RegimePerformance {
-                total_trades: 0,
-                winning_trades: 0,
-                win_rate: 0.5,
-                avg_conviction: 0.0,
-            });
+        let regime_perf =
+            self.regime_performance
+                .entry(regime.to_string())
+                .or_insert(RegimePerformance {
+                    total_trades: 0,
+                    winning_trades: 0,
+                    win_rate: 0.5,
+                    avg_conviction: 0.0,
+                });
         regime_perf.total_trades += 1;
         if pnl_pct > 0.0 {
             regime_perf.winning_trades += 1;
@@ -168,7 +169,9 @@ impl SkillPerformance {
         // Weighted adjustment — blend toward base to prevent runaway weights
         let raw_weight = self.base_weight * performance_factor * quality_boost;
         self.adjusted_weight = self.base_weight * 0.3 + raw_weight * 0.7;
-        self.adjusted_weight = self.adjusted_weight.clamp(self.base_weight * 0.1, self.base_weight * 5.0);
+        self.adjusted_weight = self
+            .adjusted_weight
+            .clamp(self.base_weight * 0.1, self.base_weight * 5.0);
     }
 }
 
@@ -257,9 +260,9 @@ impl LearningEngine {
 
     /// Register a skill for tracking
     pub fn register_skill(&mut self, skill_id: &str, skill_name: &str, base_weight: f64) {
-        self.skills.entry(skill_id.to_string()).or_insert_with(|| {
-            SkillPerformance::new(skill_id, skill_name, base_weight)
-        });
+        self.skills
+            .entry(skill_id.to_string())
+            .or_insert_with(|| SkillPerformance::new(skill_id, skill_name, base_weight));
     }
 
     /// Register multiple skills at once
@@ -314,7 +317,7 @@ impl LearningEngine {
                 let was_correct = match signal.direction {
                     SignalDirection::Bullish => pnl_pct > 0.0,
                     SignalDirection::Bearish => pnl_pct > 0.0, // Short wins
-                    SignalDirection::Neutral => true,           // Neutral is always "correct" in a way
+                    SignalDirection::Neutral => true, // Neutral is always "correct" in a way
                 };
 
                 // Update skill performance
@@ -385,7 +388,8 @@ impl LearningEngine {
         self.skills
             .get(skill_id)
             .map(|p| {
-                if self.config.adaptive_weighting_enabled && p.total_trades >= self.config.min_trades_for_weighting
+                if self.config.adaptive_weighting_enabled
+                    && p.total_trades >= self.config.min_trades_for_weighting
                 {
                     p.adjusted_weight
                 } else {

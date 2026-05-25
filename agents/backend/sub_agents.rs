@@ -26,9 +26,9 @@ pub struct SubAgentResult {
     pub agent_name: String,
     pub category: SkillCategory,
     pub signals: Vec<SkillSignal>,
-    pub conviction: f64,       // -1.0 to 1.0
+    pub conviction: f64, // -1.0 to 1.0
     pub direction: SignalDirection,
-    pub confidence: f64,       // 0.0 to 1.0 — how confident the agent is
+    pub confidence: f64, // 0.0 to 1.0 — how confident the agent is
     pub summary: String,
     pub processing_time_ms: f64,
 }
@@ -82,10 +82,18 @@ impl Default for TechnicalAnalyst {
 
 #[async_trait::async_trait]
 impl SubAgent for TechnicalAnalyst {
-    fn id(&self) -> &str { "technical_analyst" }
-    fn name(&self) -> &str { "Technical Analyst" }
-    fn description(&self) -> &str { "Performs comprehensive technical analysis using 25+ indicators across momentum, trend, volume, volatility, and pattern recognition" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &str {
+        "technical_analyst"
+    }
+    fn name(&self) -> &str {
+        "Technical Analyst"
+    }
+    fn description(&self) -> &str {
+        "Performs comprehensive technical analysis using 25+ indicators across momentum, trend, volume, volatility, and pattern recognition"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> SubAgentResult {
         let start = std::time::Instant::now();
@@ -135,8 +143,14 @@ impl SubAgent for TechnicalAnalyst {
 
 impl TechnicalAnalyst {
     fn summarize(conviction: f64, signals: &[SkillSignal]) -> (SignalDirection, String) {
-        let bullish = signals.iter().filter(|s| s.direction == SignalDirection::Bullish).count();
-        let bearish = signals.iter().filter(|s| s.direction == SignalDirection::Bearish).count();
+        let bullish = signals
+            .iter()
+            .filter(|s| s.direction == SignalDirection::Bullish)
+            .count();
+        let bearish = signals
+            .iter()
+            .filter(|s| s.direction == SignalDirection::Bearish)
+            .count();
 
         let direction = if conviction > 0.15 {
             SignalDirection::Bullish
@@ -189,10 +203,18 @@ impl Default for RiskManager {
 
 #[async_trait::async_trait]
 impl SubAgent for RiskManager {
-    fn id(&self) -> &str { "risk_manager" }
-    fn name(&self) -> &str { "Risk Manager" }
-    fn description(&self) -> &str { "Assesses portfolio risk, position sizing, volatility, and exposure limits" }
-    fn category(&self) -> SkillCategory { SkillCategory::RiskAssessment }
+    fn id(&self) -> &str {
+        "risk_manager"
+    }
+    fn name(&self) -> &str {
+        "Risk Manager"
+    }
+    fn description(&self) -> &str {
+        "Assesses portfolio risk, position sizing, volatility, and exposure limits"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::RiskAssessment
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> SubAgentResult {
         let start = std::time::Instant::now();
@@ -226,13 +248,24 @@ impl SubAgent for RiskManager {
             category: self.category(),
             signals,
             conviction: weighted_sum,
-            direction: if risk_score > 0.6 { SignalDirection::Bearish } else if risk_score < 0.3 { SignalDirection::Bullish } else { SignalDirection::Neutral },
+            direction: if risk_score > 0.6 {
+                SignalDirection::Bearish
+            } else if risk_score < 0.3 {
+                SignalDirection::Bullish
+            } else {
+                SignalDirection::Neutral
+            },
             confidence: total_weight / (self.skills.len() as f64).max(1.0),
-            summary: format!("Risk score: {:.1}% — {}",
+            summary: format!(
+                "Risk score: {:.1}% — {}",
                 risk_score * 100.0,
-                if risk_score > 0.6 { "HIGH RISK: Reduce exposure recommended" }
-                else if risk_score > 0.3 { "MODERATE RISK: Standard position sizing" }
-                else { "LOW RISK: Favorable for increased exposure" }
+                if risk_score > 0.6 {
+                    "HIGH RISK: Reduce exposure recommended"
+                } else if risk_score > 0.3 {
+                    "MODERATE RISK: Standard position sizing"
+                } else {
+                    "LOW RISK: Favorable for increased exposure"
+                }
             ),
             processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
         }
@@ -269,10 +302,18 @@ impl Default for PortfolioManager {
 
 #[async_trait::async_trait]
 impl SubAgent for PortfolioManager {
-    fn id(&self) -> &str { "portfolio_manager" }
-    fn name(&self) -> &str { "Portfolio Manager" }
-    fn description(&self) -> &str { "Manages portfolio allocation, diversification, and overall health" }
-    fn category(&self) -> SkillCategory { SkillCategory::PortfolioAnalysis }
+    fn id(&self) -> &str {
+        "portfolio_manager"
+    }
+    fn name(&self) -> &str {
+        "Portfolio Manager"
+    }
+    fn description(&self) -> &str {
+        "Manages portfolio allocation, diversification, and overall health"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::PortfolioAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> SubAgentResult {
         let start = std::time::Instant::now();
@@ -306,13 +347,24 @@ impl SubAgent for PortfolioManager {
             category: self.category(),
             signals,
             conviction: health_score,
-            direction: if health_score > 0.2 { SignalDirection::Bullish } else if health_score < -0.2 { SignalDirection::Bearish } else { SignalDirection::Neutral },
+            direction: if health_score > 0.2 {
+                SignalDirection::Bullish
+            } else if health_score < -0.2 {
+                SignalDirection::Bearish
+            } else {
+                SignalDirection::Neutral
+            },
             confidence: total_weight / (self.skills.len() as f64).max(1.0),
-            summary: format!("Portfolio health: {:.1}% — {}",
+            summary: format!(
+                "Portfolio health: {:.1}% — {}",
                 (health_score + 1.0) * 50.0,
-                if health_score > 0.3 { "Well diversified, room for new positions" }
-                else if health_score > -0.3 { "Adequate diversification, standard allocation" }
-                else { "Over-concentrated, consider rebalancing" }
+                if health_score > 0.3 {
+                    "Well diversified, room for new positions"
+                } else if health_score > -0.3 {
+                    "Adequate diversification, standard allocation"
+                } else {
+                    "Over-concentrated, consider rebalancing"
+                }
             ),
             processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
         }
@@ -330,10 +382,18 @@ pub struct MarketDataAgent;
 
 #[async_trait::async_trait]
 impl SubAgent for MarketDataAgent {
-    fn id(&self) -> &str { "market_data_agent" }
-    fn name(&self) -> &str { "Market Data Agent" }
-    fn description(&self) -> &str { "Processes raw market data, detects patterns, and provides contextual market intelligence" }
-    fn category(&self) -> SkillCategory { SkillCategory::MarketIntelligence }
+    fn id(&self) -> &str {
+        "market_data_agent"
+    }
+    fn name(&self) -> &str {
+        "Market Data Agent"
+    }
+    fn description(&self) -> &str {
+        "Processes raw market data, detects patterns, and provides contextual market intelligence"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::MarketIntelligence
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> SubAgentResult {
         let start = std::time::Instant::now();
@@ -369,19 +429,31 @@ impl SubAgent for MarketDataAgent {
 
         // Volume surge detection
         let avg_volume: f64 = candles.iter().map(|c| c.volume).sum::<f64>() / len as f64;
-        let volume_surge = if avg_volume > 0.0 { last.volume / avg_volume } else { 1.0 };
+        let volume_surge = if avg_volume > 0.0 {
+            last.volume / avg_volume
+        } else {
+            1.0
+        };
 
         // Range analysis
         let highs: Vec<f64> = candles.iter().map(|c| c.high).collect();
         let lows: Vec<f64> = candles.iter().map(|c| c.low).collect();
         let max_high = highs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let min_low = lows.iter().cloned().fold(f64::INFINITY, f64::min);
-        let range = if min_low > 0.0 { (max_high - min_low) / min_low * 100.0 } else { 0.0 };
+        let range = if min_low > 0.0 {
+            (max_high - min_low) / min_low * 100.0
+        } else {
+            0.0
+        };
 
         // Intrabar volatility
         let body = (last.close - last.open).abs();
         let candle_range = (last.high - last.low).abs();
-        let volatility_ratio = if candle_range > 0.0 { body / candle_range } else { 0.5 };
+        let volatility_ratio = if candle_range > 0.0 {
+            body / candle_range
+        } else {
+            0.5
+        };
 
         // Determine direction
         let (direction, strength, raw_conviction) = if price_change > 1.0 && volume_surge > 1.5 {
@@ -436,7 +508,11 @@ impl SubAgent for MarketDataAgent {
                 if price_change > 0.0 { "+" } else { "" },
                 price_change,
                 volume_surge,
-                if volume_surge > 1.5 { "abnormal volume detected" } else { "normal flow" }
+                if volume_surge > 1.5 {
+                    "abnormal volume detected"
+                } else {
+                    "normal flow"
+                }
             ),
             processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
         }
@@ -472,7 +548,10 @@ impl NethraOrchestrator {
         agent_weights.insert("portfolio_manager".to_string(), 0.20);
         agent_weights.insert("market_data_agent".to_string(), 0.15);
 
-        Self { agents, agent_weights }
+        Self {
+            agents,
+            agent_weights,
+        }
     }
 
     /// Update weights for specific agents (called by learning engine)
@@ -498,7 +577,11 @@ impl NethraOrchestrator {
         let mut agent_results = Vec::new();
 
         for result in results {
-            let weight = self.agent_weights.get(&result.agent_id).copied().unwrap_or(0.25);
+            let weight = self
+                .agent_weights
+                .get(&result.agent_id)
+                .copied()
+                .unwrap_or(0.25);
             weighted_conviction += weight * result.conviction;
             total_weight += weight;
             all_signals.extend(result.signals.clone());
@@ -519,9 +602,18 @@ impl NethraOrchestrator {
             SignalDirection::Neutral
         };
 
-        let bullish = all_signals.iter().filter(|s| s.direction == SignalDirection::Bullish).count() as u32;
-        let bearish = all_signals.iter().filter(|s| s.direction == SignalDirection::Bearish).count() as u32;
-        let neutral = all_signals.iter().filter(|s| s.direction == SignalDirection::Neutral).count() as u32;
+        let bullish = all_signals
+            .iter()
+            .filter(|s| s.direction == SignalDirection::Bullish)
+            .count() as u32;
+        let bearish = all_signals
+            .iter()
+            .filter(|s| s.direction == SignalDirection::Bearish)
+            .count() as u32;
+        let neutral = all_signals
+            .iter()
+            .filter(|s| s.direction == SignalDirection::Neutral)
+            .count() as u32;
 
         OrchestratedResult {
             symbol: context.symbol.clone(),

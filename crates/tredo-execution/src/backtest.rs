@@ -1,10 +1,8 @@
 use crate::engine::{ExecutionEngine, StateCache};
-use tredo_types::{
-    ExecutionCommand, TantraCommand,
-    TradeDecision, DecisionStatus,
-    OrderBookSnapshot, RiskEngine,
-};
 use tokio::sync::mpsc;
+use tredo_types::{
+    DecisionStatus, ExecutionCommand, OrderBookSnapshot, RiskEngine, TantraCommand, TradeDecision,
+};
 use uuid::Uuid;
 
 pub async fn run_backtest(historical_data: Vec<OrderBookSnapshot>) {
@@ -14,20 +12,19 @@ pub async fn run_backtest(historical_data: Vec<OrderBookSnapshot>) {
     let cache = StateCache::new();
     cache.balances.insert("USDT".to_string(), 10000.0);
 
-    let engine = ExecutionEngine::new(
-        rx,
-        cache.clone(),
-        RiskEngine::new(),
-        tantra_tx,
-    );
+    let engine = ExecutionEngine::new(rx, cache.clone(), RiskEngine::new(), tantra_tx);
 
     tokio::spawn(engine.run());
 
     for snapshot in historical_data {
-        if snapshot.bids.is_empty() { continue; }
+        if snapshot.bids.is_empty() {
+            continue;
+        }
 
         let price = snapshot.bids[0].price;
-        let _ = tx.send(ExecutionCommand::UpdateBalance("USDT".to_string(), 10000.0)).await;
+        let _ = tx
+            .send(ExecutionCommand::UpdateBalance("USDT".to_string(), 10000.0))
+            .await;
 
         let decision = TradeDecision {
             id: Uuid::new_v4(),
@@ -47,6 +44,8 @@ pub async fn run_backtest(historical_data: Vec<OrderBookSnapshot>) {
     // Allow final tasks to flush
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
-    println!("✅ Backtest completed. Final USDT balance: {:?}",
-        cache.balances.get("USDT").map(|v| *v));
+    println!(
+        "✅ Backtest completed. Final USDT balance: {:?}",
+        cache.balances.get("USDT").map(|v| *v)
+    );
 }

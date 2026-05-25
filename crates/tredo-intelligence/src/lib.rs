@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use std::sync::{Mutex, RwLock};
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::{Mutex, RwLock};
+use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 pub mod gemini_llm;
@@ -11,11 +11,10 @@ pub use gemini_llm::GeminiLLM;
 pub mod ollama_llm;
 pub use ollama_llm::OllamaLLM;
 
-use tredo_core::{
-    AgentProvider, LLMProvider, PluginRegistry,
-    MarketAnalysisContext, AggregatedAnalysis,
-};
 use tredo_bridge::TieredCache;
+use tredo_core::{
+    AgentProvider, AggregatedAnalysis, LLMProvider, MarketAnalysisContext, PluginRegistry,
+};
 
 // ── KV Cache ──────────────────────────────────────────────────────────────
 
@@ -71,7 +70,8 @@ impl KVCache {
             }
         }
 
-        self.misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.misses
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         None
     }
 
@@ -80,18 +80,22 @@ impl KVCache {
         let key = Self::hash_key(prompt);
         if let Ok(mut store) = self.store.lock() {
             if store.len() >= self.max_entries {
-                if let Some(oldest_key) = store.iter()
+                if let Some(oldest_key) = store
+                    .iter()
                     .min_by_key(|(_, entry)| entry.access_count)
                     .map(|(k, _)| *k)
                 {
                     store.remove(&oldest_key);
                 }
             }
-            store.insert(key, KVCacheEntry {
-                response,
-                created_at: Instant::now(),
-                access_count: 0,
-            });
+            store.insert(
+                key,
+                KVCacheEntry {
+                    response,
+                    created_at: Instant::now(),
+                    access_count: 0,
+                },
+            );
         }
     }
 
@@ -210,21 +214,35 @@ impl IntelligencePool {
         }
 
         let llm = self.llm.read().expect("LLM RwLock poisoned").clone();
-        println!("[IntelligencePool] KV cache MISS — querying LLM provider: {}", llm.provider_name());
+        println!(
+            "[IntelligencePool] KV cache MISS — querying LLM provider: {}",
+            llm.provider_name()
+        );
 
-        let _permit = self.semaphore.acquire().await.map_err(|_| "Failed to acquire permit")?;
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .map_err(|_| "Failed to acquire permit")?;
 
-        match llm.complete(prompt, Some("HFT analyst. Reply JSON only."), None).await {
+        match llm
+            .complete(prompt, Some("HFT analyst. Reply JSON only."), None)
+            .await
+        {
             Ok(response) => {
                 // Cache in both layers
                 self.kv_cache.set(prompt, response.clone());
                 if let Some(ref tc) = self.tiered_cache {
-                    tc.set(&format!("llm:{}", KVCache::hash_key_fn(prompt)), &response).await;
+                    tc.set(&format!("llm:{}", KVCache::hash_key_fn(prompt)), &response)
+                        .await;
                 }
                 Ok(response)
             }
             Err(e) => {
-                println!("[IntelligencePool] LLM provider error: {:?}. Falling back to dynamic mock.", e);
+                println!(
+                    "[IntelligencePool] LLM provider error: {:?}. Falling back to dynamic mock.",
+                    e
+                );
                 let fallback = get_fallback_analysis(prompt);
                 self.kv_cache.set(prompt, fallback.clone());
                 Ok(fallback)
@@ -234,23 +252,32 @@ impl IntelligencePool {
 
     /// Run agent-based analysis on market context.
     /// Delegates to the registered AgentProvider.
-    pub async fn analyze_with_skills(&self, mut context: MarketAnalysisContext) -> AggregatedAnalysis {
+    pub async fn analyze_with_skills(
+        &self,
+        mut context: MarketAnalysisContext,
+    ) -> AggregatedAnalysis {
         // 1. Evaluate all 30+ native Rust skills locally on the market context first
         let local_aggregated = self.skills_evaluator.analyze(&context).await;
-        
+
         // 2. Inject these calculated skills directly into context.local_skills
         context.local_skills = Some(local_aggregated.signals.clone());
 
         // 3. Delegate to the active AgentProvider (which can optionally use/read the local skills)
         let agent = self.agent.read().expect("Agent RwLock poisoned").clone();
         agent.analyze_market(&context).await.unwrap_or_else(|e| {
-            println!("[IntelligencePool] Active agent error: {:?}. Falling back to Rust local skills.", e);
+            println!(
+                "[IntelligencePool] Active agent error: {:?}. Falling back to Rust local skills.",
+                e
+            );
             local_aggregated
         })
     }
 
     /// Run orchestrated analysis through sub-agents (if supported by the provider).
-    pub async fn analyze_orchestrated(&self, context: &MarketAnalysisContext) -> Option<serde_json::Value> {
+    pub async fn analyze_orchestrated(
+        &self,
+        context: &MarketAnalysisContext,
+    ) -> Option<serde_json::Value> {
         let agent = self.agent.read().expect("Agent RwLock poisoned").clone();
         agent.analyze_orchestrated(context).await
     }

@@ -35,8 +35,19 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
+use rmcp::{
+    handler::server::{wrapper::Parameters, ServerHandler},
+    model::{ErrorData as McpError, *}, // For ServerCapabilities, Implementation, etc.
+    schemars,
+    service::{RequestContext, RoleServer},
+    tool,
+    tool_router,
+};
+use serde::Deserialize;
+use tokio::sync::Mutex;
 use tredo_autotrader::AutoTradingLoop;
-use tredo_bridge::{RedisBridge, AgentRegistry, TieredCache, SharedMemory, HierarchicalRAG};
+use tredo_bridge::{AgentRegistry, HierarchicalRAG, RedisBridge, SharedMemory, TieredCache};
 use tredo_core::PluginRegistry;
 use tredo_data::{MarketDataProvider, TimeFrame, YahooFinanceProvider};
 use tredo_intelligence::IntelligencePool;
@@ -44,15 +55,6 @@ use tredo_journal::TradeJournal;
 use tredo_learning::LearningEngine;
 use tredo_stream::StreamRegistry;
 use tredo_tantra::TantraService;
-use chrono::Utc;
-use rmcp::{
-    schemars, tool, tool_router,
-    handler::server::{wrapper::Parameters, ServerHandler},
-    model::{ErrorData as McpError, *},  // For ServerCapabilities, Implementation, etc.
-    service::{RequestContext, RoleServer},
-};
-use serde::Deserialize;
-use tokio::sync::Mutex;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  AppState Wrapper — cloned into each MCP handler
@@ -192,12 +194,16 @@ impl ArkMcpServer {
 impl ArkMcpServer {
     // ── 1. Market Analysis ──────────────────────────────────────────────
 
-    #[tool(description = "Run full technical and risk analysis on a trading symbol using 30+ built-in skills")]
+    #[tool(
+        description = "Run full technical and risk analysis on a trading symbol using 30+ built-in skills"
+    )]
     async fn market_analysis(
         &self,
         Parameters(params): Parameters<MarketAnalysisParams>,
     ) -> String {
-        let candles = self.state.data_provider
+        let candles = self
+            .state
+            .data_provider
             .fetch_candles(&params.symbol, TimeFrame::Hour1)
             .await
             .unwrap_or_default();
@@ -209,14 +215,17 @@ impl ArkMcpServer {
         use std::collections::HashMap;
         let context = tredo_core::MarketAnalysisContext {
             symbol: params.symbol.clone(),
-            candles: candles.into_iter().map(|c| tredo_core::Candle {
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-            }).collect(),
+            candles: candles
+                .into_iter()
+                .map(|c| tredo_core::Candle {
+                    time: c.time,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                    volume: c.volume,
+                })
+                .collect(),
             current_price,
             cash_available,
             portfolio_value,
@@ -239,12 +248,15 @@ impl ArkMcpServer {
             "total_skills": skills.len(),
             "available_skills": skills,
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     // ── 2. Trading Status ───────────────────────────────────────────────
 
-    #[tool(description = "Get current auto-trading system status, including enabled state, symbols, and paper trading mode")]
+    #[tool(
+        description = "Get current auto-trading system status, including enabled state, symbols, and paper trading mode"
+    )]
     async fn trading_status(&self) -> String {
         let state = self.state.auto_trader.get_state().await;
         let learning = {
@@ -262,7 +274,8 @@ impl ArkMcpServer {
             "regime_optimization": state.regime_optimization_enabled,
             "skill_count": learning.len(),
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     // ── 3. Trading Control ──────────────────────────────────────────────
@@ -293,8 +306,16 @@ impl ArkMcpServer {
                 let state = self.state.auto_trader.get_state().await;
                 format!(
                     "Auto-trading is {}. Paper trading: {}. Monitoring {} symbols.",
-                    if state.enabled { "✅ ACTIVE" } else { "⏸️ PAUSED" },
-                    if state.paper_trading { "enabled" } else { "disabled" },
+                    if state.enabled {
+                        "✅ ACTIVE"
+                    } else {
+                        "⏸️ PAUSED"
+                    },
+                    if state.paper_trading {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
                     state.symbols.len()
                 )
             }
@@ -304,10 +325,7 @@ impl ArkMcpServer {
     // ── 4. Manual Trade ─────────────────────────────────────────────────
 
     #[tool(description = "Execute a manual trade override — buy or sell a symbol")]
-    async fn manual_trade(
-        &self,
-        Parameters(params): Parameters<ManualTradeParams>,
-    ) -> String {
+    async fn manual_trade(&self, Parameters(params): Parameters<ManualTradeParams>) -> String {
         let decision = tredo_types::TradeDecision {
             id: uuid::Uuid::new_v4(),
             symbol: params.symbol.clone(),
@@ -325,7 +343,10 @@ impl ArkMcpServer {
         // For now, log and return success
         self.state.stream_registry.global().alert(
             "info",
-            &format!("[MCP] Manual trade: {} {} of {}", params.side, params.amount, params.symbol),
+            &format!(
+                "[MCP] Manual trade: {} {} of {}",
+                params.side, params.amount, params.symbol
+            ),
         );
 
         format!(
@@ -340,11 +361,13 @@ impl ArkMcpServer {
     // ── 5. Get Price ────────────────────────────────────────────────────
 
     #[tool(description = "Get the current market price for a trading symbol")]
-    async fn get_price(
-        &self,
-        Parameters(params): Parameters<GetPriceParams>,
-    ) -> String {
-        match self.state.data_provider.fetch_current_price(&params.symbol).await {
+    async fn get_price(&self, Parameters(params): Parameters<GetPriceParams>) -> String {
+        match self
+            .state
+            .data_provider
+            .fetch_current_price(&params.symbol)
+            .await
+        {
             Ok(price) => format!(
                 "💰 Current price of {}: ${:.4} (timestamp: {})",
                 params.symbol,
@@ -358,10 +381,7 @@ impl ArkMcpServer {
     // ── 6. Market Candles ───────────────────────────────────────────────
 
     #[tool(description = "Get historical OHLCV candle data for a symbol")]
-    async fn market_candles(
-        &self,
-        Parameters(params): Parameters<MarketCandlesParams>,
-    ) -> String {
+    async fn market_candles(&self, Parameters(params): Parameters<MarketCandlesParams>) -> String {
         let timeframe = match params.timeframe.as_deref() {
             Some("1m") => TimeFrame::Min1,
             Some("5m") => TimeFrame::Min5,
@@ -372,7 +392,12 @@ impl ArkMcpServer {
             _ => TimeFrame::Hour1,
         };
 
-        match self.state.data_provider.fetch_candles(&params.symbol, timeframe).await {
+        match self
+            .state
+            .data_provider
+            .fetch_candles(&params.symbol, timeframe)
+            .await
+        {
             Ok(candles) => {
                 let count = candles.len();
                 let latest = candles.last();
@@ -384,12 +409,14 @@ impl ArkMcpServer {
                     "latest_price": latest.map(|c| c.close),
                     "latest_timestamp": latest.map(|c| c.time),
                     "timestamp": Utc::now().to_rfc3339(),
-                }).to_string()
+                })
+                .to_string()
             }
             Err(e) => serde_json::json!({
                 "error": format!("Failed to fetch candles: {}", e),
                 "symbol": params.symbol,
-            }).to_string(),
+            })
+            .to_string(),
         }
     }
 
@@ -406,7 +433,8 @@ impl ArkMcpServer {
             "agents": agents,
             "agent_provider": self.state.intelligence.agent_provider().provider_name(),
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     // ── 8. System Status ────────────────────────────────────────────────
@@ -440,7 +468,8 @@ impl ArkMcpServer {
                 "llms": self.state.registry.list_llms(),
             },
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     // ── 9. Portfolio Status ─────────────────────────────────────────────
@@ -455,17 +484,21 @@ impl ArkMcpServer {
                     "stats": stats,
                     "recent_trades_count": trades.len(),
                     "timestamp": Utc::now().to_rfc3339(),
-                }).to_string()
+                })
+                .to_string()
             }
             Err(e) => serde_json::json!({
                 "error": format!("Failed to get performance stats: {}", e),
-            }).to_string(),
+            })
+            .to_string(),
         }
     }
 
     // ── 10. Learning Stats ──────────────────────────────────────────────
 
-    #[tool(description = "Get learning engine statistics including top-performing skills and regime optimizations")]
+    #[tool(
+        description = "Get learning engine statistics including top-performing skills and regime optimizations"
+    )]
     async fn learning_stats(&self) -> String {
         let engine = self.state.learning_engine.lock().await;
         let top = engine.top_skills(10);
@@ -479,29 +512,31 @@ impl ArkMcpServer {
             "underperformers": worst,
             "regime_optimizations": optima,
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     // ── 11. Bridge Query ────────────────────────────────────────────────
 
     #[tool(description = "Query the Python Nethra agent through the Redis bridge")]
-    async fn bridge_query(
-        &self,
-        Parameters(params): Parameters<BridgeQueryParams>,
-    ) -> String {
+    async fn bridge_query(&self, Parameters(params): Parameters<BridgeQueryParams>) -> String {
         let method = &params.method;
         let payload = params.params.unwrap_or(serde_json::json!({}));
 
         // Attempt to send via Redis bridge
-        let msg = tredo_bridge::AgentBusMessage::new(
-            "rust_tredo",
-            "python_nethra",
-            method,
-            payload,
-        );
+        let msg =
+            tredo_bridge::AgentBusMessage::new("rust_tredo", "python_nethra", method, payload);
 
-        match self.state.redis_bridge.publish("nethra:agent:python_nethra", &msg).await {
-            Ok(_) => format!("✅ Request sent to Python Nethra via Redis bridge: method='{}'", method),
+        match self
+            .state
+            .redis_bridge
+            .publish("nethra:agent:python_nethra", &msg)
+            .await
+        {
+            Ok(_) => format!(
+                "✅ Request sent to Python Nethra via Redis bridge: method='{}'",
+                method
+            ),
             Err(e) => format!("❌ Failed to reach Python Nethra: {}", e),
         }
     }
@@ -509,24 +544,28 @@ impl ArkMcpServer {
     // ── 12. RAG Search ──────────────────────────────────────────────────
 
     #[tool(description = "Search the Hierarchical RAG knowledge base")]
-    async fn rag_search(
-        &self,
-        Parameters(params): Parameters<RAGSearchParams>,
-    ) -> String {
-        match self.state.rag_db.search(
-            &params.query,
-            params.agent_id.as_deref(),
-            params.limit.unwrap_or(10),
-        ).await {
+    async fn rag_search(&self, Parameters(params): Parameters<RAGSearchParams>) -> String {
+        match self
+            .state
+            .rag_db
+            .search(
+                &params.query,
+                params.agent_id.as_deref(),
+                params.limit.unwrap_or(10),
+            )
+            .await
+        {
             Ok(results) => serde_json::json!({
                 "count": results.len(),
                 "results": results,
                 "timestamp": Utc::now().to_rfc3339(),
-            }).to_string(),
+            })
+            .to_string(),
             Err(e) => serde_json::json!({
                 "error": e,
                 "query": params.query,
-            }).to_string(),
+            })
+            .to_string(),
         }
     }
 }
@@ -585,17 +624,23 @@ impl ArkMcpServerWithResources {
                 .no_annotation(),
             RawResource::new("tredo://learning", "Learning Engine")
                 .with_title("Self-Learning Engine Statistics")
-                .with_description("Top-performing skills, underperformers, and regime optimizations")
+                .with_description(
+                    "Top-performing skills, underperformers, and regime optimizations",
+                )
                 .with_mime_type("application/json")
                 .no_annotation(),
             RawResource::new("tredo://providers", "Providers")
                 .with_title("Plugin Provider Registry")
-                .with_description("Available agent and LLM providers, and which are currently active")
+                .with_description(
+                    "Available agent and LLM providers, and which are currently active",
+                )
                 .with_mime_type("application/json")
                 .no_annotation(),
             RawResource::new("tredo://trading", "Trading Status")
                 .with_title("Auto-Trading System Status")
-                .with_description("Current auto-trading configuration, enabled state, and symbol list")
+                .with_description(
+                    "Current auto-trading configuration, enabled state, and symbol list",
+                )
                 .with_mime_type("application/json")
                 .no_annotation(),
             RawResource::new("tredo://tantra", "Tantra Status")
@@ -680,7 +725,10 @@ impl ArkMcpServerWithResources {
         cash_available: f64,
         portfolio_value: f64,
     ) -> Vec<PromptMessage> {
-        let candles = self.inner.state.data_provider
+        let candles = self
+            .inner
+            .state
+            .data_provider
             .fetch_candles(symbol, TimeFrame::Hour1)
             .await
             .unwrap_or_default();
@@ -688,14 +736,17 @@ impl ArkMcpServerWithResources {
         use std::collections::HashMap;
         let context = tredo_core::MarketAnalysisContext {
             symbol: symbol.to_string(),
-            candles: candles.into_iter().map(|c| tredo_core::Candle {
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-            }).collect(),
+            candles: candles
+                .into_iter()
+                .map(|c| tredo_core::Candle {
+                    time: c.time,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                    volume: c.volume,
+                })
+                .collect(),
             current_price,
             cash_available,
             portfolio_value,
@@ -704,7 +755,12 @@ impl ArkMcpServerWithResources {
             local_skills: None,
         };
 
-        let analysis = self.inner.state.intelligence.analyze_with_skills(context).await;
+        let analysis = self
+            .inner
+            .state
+            .intelligence
+            .analyze_with_skills(context)
+            .await;
         let skills = self.inner.state.intelligence.list_skills().await;
 
         let user_msg = format!(
@@ -763,8 +819,14 @@ impl ArkMcpServerWithResources {
         );
 
         vec![
-            PromptMessage::new(PromptMessageRole::User, PromptMessageContent::text(user_msg)),
-            PromptMessage::new(PromptMessageRole::Assistant, PromptMessageContent::text(assistant_msg)),
+            PromptMessage::new(
+                PromptMessageRole::User,
+                PromptMessageContent::text(user_msg),
+            ),
+            PromptMessage::new(
+                PromptMessageRole::Assistant,
+                PromptMessageContent::text(assistant_msg),
+            ),
         ]
     }
 
@@ -781,8 +843,10 @@ impl ArkMcpServerWithResources {
         let top_skills = skills.top_skills(5);
         let total_trades = skills.total_trades();
 
-        let perf_json = serde_json::to_string_pretty(&performance.0).unwrap_or_else(|_| "N/A".to_string());
-        let skills_json = serde_json::to_string_pretty(&top_skills).unwrap_or_else(|_| "N/A".to_string());
+        let perf_json =
+            serde_json::to_string_pretty(&performance.0).unwrap_or_else(|_| "N/A".to_string());
+        let skills_json =
+            serde_json::to_string_pretty(&top_skills).unwrap_or_else(|_| "N/A".to_string());
         let assistant_msg = format!(
             concat!(
                 "## Portfolio Review\n\n",
@@ -801,9 +865,14 @@ impl ArkMcpServerWithResources {
         vec![
             PromptMessage::new(
                 PromptMessageRole::User,
-                PromptMessageContent::text("Show me my portfolio review with recent performance and recommendations."),
+                PromptMessageContent::text(
+                    "Show me my portfolio review with recent performance and recommendations.",
+                ),
             ),
-            PromptMessage::new(PromptMessageRole::Assistant, PromptMessageContent::text(assistant_msg)),
+            PromptMessage::new(
+                PromptMessageRole::Assistant,
+                PromptMessageContent::text(assistant_msg),
+            ),
         ]
     }
 
@@ -814,27 +883,36 @@ impl ArkMcpServerWithResources {
 
         let mut scan_results = Vec::new();
         for sym in &symbols {
-            let price = self.inner.state.data_provider
+            let price = self
+                .inner
+                .state
+                .data_provider
                 .fetch_current_price(sym)
                 .await
                 .unwrap_or(0.0);
 
             use std::collections::HashMap;
-            let candles = self.inner.state.data_provider
+            let candles = self
+                .inner
+                .state
+                .data_provider
                 .fetch_candles(sym, TimeFrame::Hour1)
                 .await
                 .unwrap_or_default();
 
             let context = tredo_core::MarketAnalysisContext {
                 symbol: sym.clone(),
-                candles: candles.into_iter().map(|c| tredo_core::Candle {
-                    time: c.time,
-                    open: c.open,
-                    high: c.high,
-                    low: c.low,
-                    close: c.close,
-                    volume: c.volume,
-                }).collect(),
+                candles: candles
+                    .into_iter()
+                    .map(|c| tredo_core::Candle {
+                        time: c.time,
+                        open: c.open,
+                        high: c.high,
+                        low: c.low,
+                        close: c.close,
+                        volume: c.volume,
+                    })
+                    .collect(),
                 current_price: price,
                 cash_available: 100_000.0,
                 portfolio_value: 100_000.0,
@@ -843,7 +921,12 @@ impl ArkMcpServerWithResources {
                 local_skills: None,
             };
 
-            let analysis = self.inner.state.intelligence.analyze_with_skills(context).await;
+            let analysis = self
+                .inner
+                .state
+                .intelligence
+                .analyze_with_skills(context)
+                .await;
             scan_results.push(serde_json::json!({
                 "symbol": sym,
                 "price": price,
@@ -854,7 +937,8 @@ impl ArkMcpServerWithResources {
             }));
         }
 
-        let scan_json = serde_json::to_string_pretty(&scan_results).unwrap_or_else(|_| "[]".to_string());
+        let scan_json =
+            serde_json::to_string_pretty(&scan_results).unwrap_or_else(|_| "[]".to_string());
         let assistant_msg = format!(
             concat!(
                 "## Market Scan\n\n",
@@ -875,7 +959,10 @@ impl ArkMcpServerWithResources {
                 PromptMessageRole::User,
                 PromptMessageContent::text("Scan all my watched symbols for market opportunities."),
             ),
-            PromptMessage::new(PromptMessageRole::Assistant, PromptMessageContent::text(assistant_msg)),
+            PromptMessage::new(
+                PromptMessageRole::Assistant,
+                PromptMessageContent::text(assistant_msg),
+            ),
         ]
     }
 
@@ -914,7 +1001,8 @@ impl ArkMcpServerWithResources {
             },
         ]);
 
-        let health_json = serde_json::to_string_pretty(&health_checks).unwrap_or_else(|_| "[]".to_string());
+        let health_json =
+            serde_json::to_string_pretty(&health_checks).unwrap_or_else(|_| "[]".to_string());
         let assistant_msg = format!(
             concat!(
                 "## 🏥 TREDO System Health\n\n",
@@ -927,9 +1015,14 @@ impl ArkMcpServerWithResources {
         vec![
             PromptMessage::new(
                 PromptMessageRole::User,
-                PromptMessageContent::text("Run a complete system health check on all TREDO subsystems."),
+                PromptMessageContent::text(
+                    "Run a complete system health check on all TREDO subsystems.",
+                ),
             ),
-            PromptMessage::new(PromptMessageRole::Assistant, PromptMessageContent::text(assistant_msg)),
+            PromptMessage::new(
+                PromptMessageRole::Assistant,
+                PromptMessageContent::text(assistant_msg),
+            ),
         ]
     }
 
@@ -987,7 +1080,8 @@ impl ArkMcpServerWithResources {
                 "llms": self.inner.state.registry.list_llms(),
             },
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     async fn build_portfolio(&self) -> String {
@@ -999,11 +1093,13 @@ impl ArkMcpServerWithResources {
                     "stats": stats,
                     "recent_trades_count": trades.len(),
                     "timestamp": Utc::now().to_rfc3339(),
-                }).to_string()
+                })
+                .to_string()
             }
             Err(e) => serde_json::json!({
                 "error": format!("Failed to get performance stats: {e}"),
-            }).to_string(),
+            })
+            .to_string(),
         }
     }
 
@@ -1020,7 +1116,8 @@ impl ArkMcpServerWithResources {
             "underperformers": worst,
             "regime_optimizations": optima,
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     async fn build_providers(&self) -> String {
@@ -1030,7 +1127,8 @@ impl ArkMcpServerWithResources {
             "current_agent": self.inner.state.intelligence.agent_provider().provider_name(),
             "current_llm": self.inner.state.intelligence.llm_provider().provider_name(),
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     async fn build_trading(&self) -> String {
@@ -1050,7 +1148,8 @@ impl ArkMcpServerWithResources {
             "regime_optimization": state.regime_optimization_enabled,
             "skill_count": learning.len(),
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     async fn build_tantra(&self) -> String {
@@ -1067,26 +1166,38 @@ impl ArkMcpServerWithResources {
             "events": events,
             "safety_index": if dnd { "HIGH_GUARD" } else { "STANDARD" },
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string()
+        })
+        .to_string()
     }
 
     async fn resolve_price(&self, symbol: &str) -> Result<String, ErrorData> {
-        match self.inner.state.data_provider.fetch_current_price(symbol).await {
+        match self
+            .inner
+            .state
+            .data_provider
+            .fetch_current_price(symbol)
+            .await
+        {
             Ok(price) => Ok(serde_json::json!({
                 "symbol": symbol,
                 "price": price,
                 "timestamp": Utc::now().to_rfc3339(),
-            }).to_string()),
+            })
+            .to_string()),
             Err(e) => Ok(serde_json::json!({
                 "symbol": symbol,
                 "error": format!("Failed to fetch price: {e}"),
                 "timestamp": Utc::now().to_rfc3339(),
-            }).to_string()),
+            })
+            .to_string()),
         }
     }
 
     async fn resolve_analysis(&self, symbol: &str) -> Result<String, ErrorData> {
-        let candles = self.inner.state.data_provider
+        let candles = self
+            .inner
+            .state
+            .data_provider
             .fetch_candles(symbol, TimeFrame::Hour1)
             .await
             .unwrap_or_default();
@@ -1098,14 +1209,17 @@ impl ArkMcpServerWithResources {
         use std::collections::HashMap;
         let context = tredo_core::MarketAnalysisContext {
             symbol: symbol.to_string(),
-            candles: candles.into_iter().map(|c| tredo_core::Candle {
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-            }).collect(),
+            candles: candles
+                .into_iter()
+                .map(|c| tredo_core::Candle {
+                    time: c.time,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                    volume: c.volume,
+                })
+                .collect(),
             current_price,
             cash_available,
             portfolio_value,
@@ -1114,7 +1228,12 @@ impl ArkMcpServerWithResources {
             local_skills: None,
         };
 
-        let analysis = self.inner.state.intelligence.analyze_with_skills(context).await;
+        let analysis = self
+            .inner
+            .state
+            .intelligence
+            .analyze_with_skills(context)
+            .await;
         let skills = self.inner.state.intelligence.list_skills().await;
 
         Ok(serde_json::json!({
@@ -1128,7 +1247,8 @@ impl ArkMcpServerWithResources {
             "total_skills": skills.len(),
             "available_skills": skills,
             "timestamp": Utc::now().to_rfc3339(),
-        }).to_string())
+        })
+        .to_string())
     }
 }
 
@@ -1159,7 +1279,10 @@ impl ServerHandler for ArkMcpServerWithResources {
     fn get_info(&self) -> ServerInfo {
         let mut info = self.inner.get_info();
         // Advertise tool support (from inner ArkMcpServer capabilities)
-        info.capabilities.tools.get_or_insert_with(Default::default).list_changed = Some(true);
+        info.capabilities
+            .tools
+            .get_or_insert_with(Default::default)
+            .list_changed = Some(true);
         // Advertise resource support
         info.capabilities.resources = Some(ResourcesCapability {
             subscribe: Some(false),
@@ -1190,30 +1313,41 @@ impl ServerHandler for ArkMcpServerWithResources {
         let messages = match request.name.as_str() {
             "analyze-then-trade" => {
                 let args = request.arguments.unwrap_or_default();
-                let symbol = args.get("symbol")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| ErrorData::invalid_params("Missing required parameter: symbol", None))?;
-                let current_price = args.get("current_price")
+                let symbol = args.get("symbol").and_then(|v| v.as_str()).ok_or_else(|| {
+                    ErrorData::invalid_params("Missing required parameter: symbol", None)
+                })?;
+                let current_price = args
+                    .get("current_price")
                     .and_then(|v| v.as_f64())
-                    .ok_or_else(|| ErrorData::invalid_params("Missing required parameter: current_price", None))?;
-                let cash_available = args.get("cash_available").and_then(|v| v.as_f64()).unwrap_or(100_000.0);
-                let portfolio_value = args.get("portfolio_value").and_then(|v| v.as_f64()).unwrap_or(100_000.0);
+                    .ok_or_else(|| {
+                        ErrorData::invalid_params("Missing required parameter: current_price", None)
+                    })?;
+                let cash_available = args
+                    .get("cash_available")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(100_000.0);
+                let portfolio_value = args
+                    .get("portfolio_value")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(100_000.0);
 
-                self.build_analyze_trade_prompt(symbol, current_price, cash_available, portfolio_value).await
+                self.build_analyze_trade_prompt(
+                    symbol,
+                    current_price,
+                    cash_available,
+                    portfolio_value,
+                )
+                .await
             }
-            "portfolio-review" => {
-                self.build_portfolio_review_prompt().await
+            "portfolio-review" => self.build_portfolio_review_prompt().await,
+            "market-scan" => self.build_market_scan_prompt().await,
+            "system-health" => self.build_system_health_prompt().await,
+            _ => {
+                return Err(ErrorData::invalid_params(
+                    format!("Unknown prompt: {}", request.name),
+                    None,
+                ))
             }
-            "market-scan" => {
-                self.build_market_scan_prompt().await
-            }
-            "system-health" => {
-                self.build_system_health_prompt().await
-            }
-            _ => return Err(ErrorData::invalid_params(
-                format!("Unknown prompt: {}", request.name),
-                None,
-            )),
         };
 
         Ok(GetPromptResult::new(messages)
@@ -1235,7 +1369,9 @@ impl ServerHandler for ArkMcpServerWithResources {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, ErrorData> {
-        Ok(ListResourceTemplatesResult::with_all_items(self.resource_templates.clone()))
+        Ok(ListResourceTemplatesResult::with_all_items(
+            self.resource_templates.clone(),
+        ))
     }
 
     async fn read_resource(
@@ -1244,10 +1380,11 @@ impl ServerHandler for ArkMcpServerWithResources {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, ErrorData> {
         let content = self.resolve_resource(&request.uri).await?;
-        Ok(ReadResourceResult::new(vec![
-            ResourceContents::text(content, &request.uri)
-                .with_mime_type("application/json"),
-        ]))
+        Ok(ReadResourceResult::new(vec![ResourceContents::text(
+            content,
+            &request.uri,
+        )
+        .with_mime_type("application/json")]))
     }
 }
 

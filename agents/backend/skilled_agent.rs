@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{NethraAgent, MarketAnalysisContext, AggregatedAnalysis, ProviderError, LearningFeedback};
+use crate::{
+    AggregatedAnalysis, LearningFeedback, MarketAnalysisContext, NethraAgent, ProviderError,
+};
 use tredo_core::AgentProvider;
 
 /// The default Rust-native agent provider.

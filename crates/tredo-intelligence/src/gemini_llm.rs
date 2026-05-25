@@ -3,7 +3,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use std::time::Duration;
 
-use tredo_core::{LLMProvider, LLMParams, ProviderError};
+use tredo_core::{LLMParams, LLMProvider, ProviderError};
 
 /// Gemini LLM Provider — plugs into the PluginRegistry as a replaceable LLM backend.
 ///
@@ -75,7 +75,9 @@ impl LLMProvider for GeminiLLM {
             .json(&req_body)
             .send()
             .await
-            .map_err(|e| ProviderError::ConnectionError(format!("Gemini API request failed: {}", e)))?;
+            .map_err(|e| {
+                ProviderError::ConnectionError(format!("Gemini API request failed: {}", e))
+            })?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -86,10 +88,9 @@ impl LLMProvider for GeminiLLM {
             )));
         }
 
-        let gemini_resp: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::AnalysisError(format!("Failed to parse Gemini response: {}", e)))?;
+        let gemini_resp: serde_json::Value = resp.json().await.map_err(|e| {
+            ProviderError::AnalysisError(format!("Failed to parse Gemini response: {}", e))
+        })?;
 
         // Extract text from response
         let text = gemini_resp["candidates"]
@@ -98,7 +99,9 @@ impl LLMProvider for GeminiLLM {
             .and_then(|c| c["content"]["parts"].as_array())
             .and_then(|p| p.first())
             .and_then(|p| p["text"].as_str())
-            .ok_or_else(|| ProviderError::AnalysisError("Gemini returned empty response".to_string()))?;
+            .ok_or_else(|| {
+                ProviderError::AnalysisError("Gemini returned empty response".to_string())
+            })?;
 
         Ok(text.to_string())
     }

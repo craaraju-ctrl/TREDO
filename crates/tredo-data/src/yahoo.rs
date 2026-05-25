@@ -19,14 +19,14 @@ impl YahooFinanceProvider {
     /// Format symbol for Yahoo Finance (e.g., "BTC-USD", "AAPL", "RELIANCE.NS", "GC=F")
     fn format_symbol(symbol: &str) -> String {
         let upper = symbol.to_uppercase().trim().to_string();
-        
+
         // 1. Indian Stocks (e.g., NSE:RELIANCE -> RELIANCE.NS)
         if upper.starts_with("NSE:") {
             if let Some(ticker) = upper.strip_prefix("NSE:") {
                 return format!("{}.NS", ticker);
             }
         }
-        
+
         // 2. Commodities mapping
         if upper == "XAU-USD" || upper == "GOLD" || upper.starts_with("XAU") {
             return "GC=F".to_string(); // Gold Futures
@@ -40,7 +40,7 @@ impl YahooFinanceProvider {
         if upper == "NGAS" || upper == "NATGAS" {
             return "NG=F".to_string(); // Natural Gas Futures
         }
-        
+
         // 3. Fallback standard replacement
         upper.replace('/', "-")
     }
@@ -60,11 +60,21 @@ impl YahooFinanceProvider {
             .and_then(|q| q.first())
             .ok_or_else(|| "No quote data in Yahoo response".to_string())?;
 
-        let opens = quote["open"].as_array().ok_or_else(|| "No open data".to_string())?;
-        let highs = quote["high"].as_array().ok_or_else(|| "No high data".to_string())?;
-        let lows = quote["low"].as_array().ok_or_else(|| "No low data".to_string())?;
-        let closes = quote["close"].as_array().ok_or_else(|| "No close data".to_string())?;
-        let volumes = quote["volume"].as_array().ok_or_else(|| "No volume data".to_string())?;
+        let opens = quote["open"]
+            .as_array()
+            .ok_or_else(|| "No open data".to_string())?;
+        let highs = quote["high"]
+            .as_array()
+            .ok_or_else(|| "No high data".to_string())?;
+        let lows = quote["low"]
+            .as_array()
+            .ok_or_else(|| "No low data".to_string())?;
+        let closes = quote["close"]
+            .as_array()
+            .ok_or_else(|| "No close data".to_string())?;
+        let volumes = quote["volume"]
+            .as_array()
+            .ok_or_else(|| "No volume data".to_string())?;
 
         let mut candles = Vec::with_capacity(timestamps.len());
 
@@ -107,7 +117,11 @@ impl Default for YahooFinanceProvider {
 
 #[async_trait::async_trait]
 impl MarketDataProvider for YahooFinanceProvider {
-    async fn fetch_candles(&self, symbol: &str, timeframe: TimeFrame) -> Result<Vec<Candle>, String> {
+    async fn fetch_candles(
+        &self,
+        symbol: &str,
+        timeframe: TimeFrame,
+    ) -> Result<Vec<Candle>, String> {
         let formatted = Self::format_symbol(symbol);
         let interval = timeframe.as_yahoo_interval();
         let range = timeframe.as_yahoo_range();
@@ -117,7 +131,10 @@ impl MarketDataProvider for YahooFinanceProvider {
             formatted, interval, range
         );
 
-        println!("[YahooFinance] Fetching {} {} (range: {})", formatted, interval, range);
+        println!(
+            "[YahooFinance] Fetching {} {} (range: {})",
+            formatted, interval, range
+        );
 
         let response = self
             .client
@@ -134,7 +151,10 @@ impl MarketDataProvider for YahooFinanceProvider {
             ));
         }
 
-        let text = response.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
         let json: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
@@ -166,7 +186,10 @@ mod tests {
         assert_eq!(YahooFinanceProvider::format_symbol("BTC-USD"), "BTC-USD");
         assert_eq!(YahooFinanceProvider::format_symbol("BTC/USD"), "BTC-USD");
         assert_eq!(YahooFinanceProvider::format_symbol("AAPL"), "AAPL");
-        assert_eq!(YahooFinanceProvider::format_symbol("NSE:RELIANCE"), "RELIANCE.NS");
+        assert_eq!(
+            YahooFinanceProvider::format_symbol("NSE:RELIANCE"),
+            "RELIANCE.NS"
+        );
         assert_eq!(YahooFinanceProvider::format_symbol("XAU-USD"), "GC=F");
         assert_eq!(YahooFinanceProvider::format_symbol("XAG-USD"), "SI=F");
         assert_eq!(YahooFinanceProvider::format_symbol("USOIL"), "CL=F");

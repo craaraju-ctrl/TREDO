@@ -1,6 +1,6 @@
 use super::*;
-use tokio::time::{interval, Duration};
 use serde::Deserialize;
+use tokio::time::{interval, Duration};
 
 #[derive(Deserialize)]
 struct BinanceExchangeInfo {
@@ -31,7 +31,7 @@ impl BinanceAdapter {
 
     pub async fn run(self) {
         println!("[BinanceAdapter] Starting dynamic token/coin sync...");
-        
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .user_agent("TREDO-Sethu-Exchange-Core/1.0.0")
@@ -39,11 +39,20 @@ impl BinanceAdapter {
 
         match client {
             Ok(cli) => {
-                match cli.get("https://api.binance.com/api/v3/exchangeInfo").send().await {
+                match cli
+                    .get("https://api.binance.com/api/v3/exchangeInfo")
+                    .send()
+                    .await
+                {
                     Ok(resp) => {
                         if let Ok(info) = resp.json::<BinanceExchangeInfo>().await {
                             let mut count = 0;
-                            for (idx, sym) in info.symbols.iter().filter(|s| s.status == "TRADING").enumerate() {
+                            for (idx, sym) in info
+                                .symbols
+                                .iter()
+                                .filter(|s| s.status == "TRADING")
+                                .enumerate()
+                            {
                                 self.symbol_id_map.insert(sym.symbol.clone(), idx as u16);
                                 count += 1;
                             }
@@ -77,16 +86,24 @@ impl BinanceAdapter {
         let mut interval = interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
-            let _ = self.execution_tx.send(ExecutionCommand::UpdateBalance("USDT".to_string(), 10000.0)).await;
+            let _ = self
+                .execution_tx
+                .send(ExecutionCommand::UpdateBalance("USDT".to_string(), 10000.0))
+                .await;
         }
     }
 
     fn load_defaults(&self) {
-        let defaults = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT", "DOGEUSDT"];
+        let defaults = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT", "DOGEUSDT",
+        ];
         for (idx, sym) in defaults.iter().enumerate() {
             self.symbol_id_map.insert(sym.to_string(), idx as u16);
         }
-        println!("[BinanceAdapter] Loaded {} default fallback symbols.", defaults.len());
+        println!(
+            "[BinanceAdapter] Loaded {} default fallback symbols.",
+            defaults.len()
+        );
     }
 }
 
@@ -95,7 +112,12 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub async fn execute_order(symbol: &str, side: &str, amount: f64, price: Option<f64>) -> Result<(), String> {
+pub async fn execute_order(
+    symbol: &str,
+    side: &str,
+    amount: f64,
+    price: Option<f64>,
+) -> Result<(), String> {
     let api_key = std::env::var("BINANCE_API_KEY").unwrap_or_default();
     let secret_key = std::env::var("BINANCE_SECRET_KEY").unwrap_or_default();
     if api_key.is_empty() || secret_key.is_empty() {
@@ -109,7 +131,7 @@ pub async fn execute_order(symbol: &str, side: &str, amount: f64, price: Option<
 
     let timestamp = chrono::Utc::now().timestamp_millis();
     let order_type = if price.is_some() { "LIMIT" } else { "MARKET" };
-    
+
     let mut query = format!(
         "symbol={}&side={}&type={}&quantity={:.6}&timestamp={}&recvWindow=5000",
         symbol, side, order_type, amount, timestamp
@@ -122,11 +144,15 @@ pub async fn execute_order(symbol: &str, side: &str, amount: f64, price: Option<
         .map_err(|_| "Failed to create HMAC key".to_string())?;
     mac.update(query.as_bytes());
     let signature = hex::encode(mac.finalize().into_bytes());
-    
-    let url = format!("https://api.binance.com/api/v3/order?{}&signature={}", query, signature);
+
+    let url = format!(
+        "https://api.binance.com/api/v3/order?{}&signature={}",
+        query, signature
+    );
 
     println!("[BinanceAdapter] Dispatching signed private trade: POST https://api.binance.com/api/v3/order");
-    let resp = client.post(&url)
+    let resp = client
+        .post(&url)
         .header("X-MBX-APIKEY", &api_key)
         .send()
         .await
@@ -135,10 +161,16 @@ pub async fn execute_order(symbol: &str, side: &str, amount: f64, price: Option<
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
     if status.is_success() {
-        println!("[BinanceAdapter] Private trade successfully executed: {}", body);
+        println!(
+            "[BinanceAdapter] Private trade successfully executed: {}",
+            body
+        );
         Ok(())
     } else {
-        println!("[BinanceAdapter] Private trade execution failed. Code: {}, Response: {}", status, body);
+        println!(
+            "[BinanceAdapter] Private trade execution failed. Code: {}, Response: {}",
+            status, body
+        );
         Err(format!("Binance trade failed: {}", body))
     }
 }

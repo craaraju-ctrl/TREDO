@@ -111,7 +111,10 @@ pub struct TrackedReceiver {
 }
 
 impl TrackedReceiver {
-    pub fn new(rx: broadcast::Receiver<StreamMessage>, counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> Self {
+    pub fn new(
+        rx: broadcast::Receiver<StreamMessage>,
+        counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    ) -> Self {
         Self { rx, counter }
     }
 
@@ -126,7 +129,8 @@ impl TrackedReceiver {
 
 impl Drop for TrackedReceiver {
     fn drop(&mut self) {
-        self.counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        self.counter
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -150,7 +154,8 @@ impl BroadcastHub {
 
     /// Subscribe to receive all broadcast messages
     pub fn subscribe(&self) -> TrackedReceiver {
-        self.connection_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.connection_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         TrackedReceiver::new(self.tx.subscribe(), self.connection_count.clone())
     }
 
@@ -161,7 +166,8 @@ impl BroadcastHub {
 
     /// Get the number of active subscribers
     pub fn active_connections(&self) -> u32 {
-        self.connection_count.load(std::sync::atomic::Ordering::Relaxed)
+        self.connection_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Create common convenience messages
@@ -282,16 +288,22 @@ impl StreamRegistry {
         if let Ok(mut counts) = self.message_type_counts.lock() {
             *counts.entry(msg_type).or_insert(0) += 1;
         }
-        self.message_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.message_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get stream statistics
     pub fn stats(&self) -> StreamStats {
-        let counts = self.message_type_counts.lock().ok()
+        let counts = self
+            .message_type_counts
+            .lock()
+            .ok()
             .map(|guard| guard.clone())
             .unwrap_or_default();
         StreamStats {
-            total_messages_sent: self.message_count.load(std::sync::atomic::Ordering::Relaxed),
+            total_messages_sent: self
+                .message_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             active_connections: self.global.active_connections(),
             channel_capacity: 4096,
             messages_by_type: counts,

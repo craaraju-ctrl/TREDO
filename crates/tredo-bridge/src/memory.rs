@@ -21,10 +21,10 @@ use crate::redis_bridge::RedisBridge;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedMemoryBlock {
     pub id: String,
-    pub namespace: String,        // "python_nethra", "rust_tredo", "shared"
+    pub namespace: String, // "python_nethra", "rust_tredo", "shared"
     pub key: String,
     pub value: serde_json::Value,
-    pub owner: String,             // Which side owns this memory
+    pub owner: String, // Which side owns this memory
     pub ttl_secs: u64,
     pub size_bytes: u64,
     pub created_at: DateTime<Utc>,
@@ -47,7 +47,11 @@ pub enum MemoryPressure {
 
 impl MemoryPressure {
     pub fn from_usage(current_bytes: u64, max_bytes: u64) -> Self {
-        let ratio = if max_bytes > 0 { current_bytes as f64 / max_bytes as f64 } else { 0.0 };
+        let ratio = if max_bytes > 0 {
+            current_bytes as f64 / max_bytes as f64
+        } else {
+            0.0
+        };
         if ratio > 0.95 {
             MemoryPressure::Critical
         } else if ratio > 0.80 {
@@ -76,10 +80,10 @@ pub struct SharedMemoryConfig {
 impl Default for SharedMemoryConfig {
     fn default() -> Self {
         Self {
-            max_memory_bytes: 256 * 1024 * 1024,  // 256 MB
+            max_memory_bytes: 256 * 1024 * 1024, // 256 MB
             max_entries_per_namespace: 1000,
-            default_ttl_secs: 3600,  // 1 hour
-            pressure_check_interval: 60,  // 1 minute
+            default_ttl_secs: 3600,      // 1 hour
+            pressure_check_interval: 60, // 1 minute
         }
     }
 }
@@ -115,7 +119,12 @@ impl SharedMemory {
     }
 
     /// Write a shared memory block (publishes to both Redis and Python via pub/sub)
-    pub async fn write(&self, namespace: &str, key: &str, value: serde_json::Value) -> Result<SharedMemoryBlock, String> {
+    pub async fn write(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: serde_json::Value,
+    ) -> Result<SharedMemoryBlock, String> {
         let block = SharedMemoryBlock {
             id: uuid::Uuid::new_v4().to_string(),
             namespace: namespace.to_string(),
@@ -130,11 +139,12 @@ impl SharedMemory {
         };
 
         // Store in Redis with TTL
-        let json = serde_json::to_string(&block)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+        let json = serde_json::to_string(&block).map_err(|e| format!("Serialize error: {}", e))?;
 
         let redis_key = format!("memory:{}:{}", namespace, key);
-        self.bridge.cache_set(&redis_key, &json, block.ttl_secs).await?;
+        self.bridge
+            .cache_set(&redis_key, &json, block.ttl_secs)
+            .await?;
 
         // Track locally
         let mut entries = self.local_entries.lock().await;
@@ -144,8 +154,10 @@ impl SharedMemory {
         let total_bytes: u64 = entries.iter().map(|e| e.size_bytes).sum();
         let pressure = MemoryPressure::from_usage(total_bytes, self.config.max_memory_bytes);
         if pressure != MemoryPressure::Normal {
-            warn!("[SharedMemory] Memory pressure: {:?} ({} bytes / {} max)", 
-                  pressure, total_bytes, self.config.max_memory_bytes);
+            warn!(
+                "[SharedMemory] Memory pressure: {:?} ({} bytes / {} max)",
+                pressure, total_bytes, self.config.max_memory_bytes
+            );
             match pressure {
                 MemoryPressure::High | MemoryPressure::Critical => {
                     self.evict().await;
@@ -155,38 +167,46 @@ impl SharedMemory {
         }
 
         // Notify Python Nethra via pub/sub
-        self.bridge.publish(
-            "nethra:memory",
-            &crate::redis_bridge::AgentBusMessage::broadcast(
-                "rust_tredo_memory",
-                "memory_write",
-                serde_json::json!({
-                    "namespace": namespace,
-                    "key": key,
-                    "block_id": block.id,
-                    "size_bytes": block.size_bytes,
-                    "owner": "rust_tredo",
-                }),
-            ),
-        ).await?;
+        self.bridge
+            .publish(
+                "nethra:memory",
+                &crate::redis_bridge::AgentBusMessage::broadcast(
+                    "rust_tredo_memory",
+                    "memory_write",
+                    serde_json::json!({
+                        "namespace": namespace,
+                        "key": key,
+                        "block_id": block.id,
+                        "size_bytes": block.size_bytes,
+                        "owner": "rust_tredo",
+                    }),
+                ),
+            )
+            .await?;
 
         Ok(block)
     }
 
     /// Read a shared memory block
-    pub async fn read(&self, namespace: &str, key: &str) -> Result<Option<SharedMemoryBlock>, String> {
+    pub async fn read(
+        &self,
+        namespace: &str,
+        key: &str,
+    ) -> Result<Option<SharedMemoryBlock>, String> {
         let redis_key = format!("memory:{}:{}", namespace, key);
         let json = self.bridge.cache_get(&redis_key).await?;
 
         match json {
             Some(data) => {
-                let mut block: SharedMemoryBlock = serde_json::from_str(&data)
-                    .map_err(|e| format!("Deserialize error: {}", e))?;
+                let mut block: SharedMemoryBlock =
+                    serde_json::from_str(&data).map_err(|e| format!("Deserialize error: {}", e))?;
                 block.access_count += 1;
                 // Update access count in Redis
-                let updated = serde_json::to_string(&block)
-                    .map_err(|e| format!("Serialize error: {}", e))?;
-                self.bridge.cache_set(&redis_key, &updated, block.ttl_secs).await?;
+                let updated =
+                    serde_json::to_string(&block).map_err(|e| format!("Serialize error: {}", e))?;
+                self.bridge
+                    .cache_set(&redis_key, &updated, block.ttl_secs)
+                    .await?;
                 Ok(Some(block))
             }
             None => Ok(None),
@@ -227,7 +247,8 @@ impl SharedMemory {
 
         // Sort by access count (ascending) and created_at (oldest first)
         entries.sort_by(|a, b| {
-            a.access_count.cmp(&b.access_count)
+            a.access_count
+                .cmp(&b.access_count)
                 .then_with(|| a.created_at.cmp(&b.created_at))
         });
 
@@ -240,7 +261,10 @@ impl SharedMemory {
                 let redis_key = format!("memory:{}:{}", block.namespace, block.key);
                 let _ = self.bridge.cache_set(&redis_key, "__evicted__", 1).await;
             }
-            info!("[SharedMemory] Evicted {} entries under memory pressure", evicted.len());
+            info!(
+                "[SharedMemory] Evicted {} entries under memory pressure",
+                evicted.len()
+            );
             evicted.len()
         } else {
             0
@@ -254,7 +278,10 @@ impl SharedMemory {
 
         MemoryStats {
             total_entries: entries.len(),
-            python_entries: entries.iter().filter(|e| e.owner == "python_nethra").count(),
+            python_entries: entries
+                .iter()
+                .filter(|e| e.owner == "python_nethra")
+                .count(),
             rust_entries: entries.iter().filter(|e| e.owner == "rust_tredo").count(),
             shared_entries: entries.iter().filter(|e| e.namespace == "shared").count(),
             estimated_bytes: total_bytes,

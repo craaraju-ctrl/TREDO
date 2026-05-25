@@ -1,6 +1,6 @@
-use tokio::sync::mpsc;
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tredo_types::*;
 
 pub mod binance;
@@ -22,17 +22,13 @@ impl ExchangeAdapters {
 
     pub async fn start(self) {
         // Spawn Binance adapter
-        let binance = binance::BinanceAdapter::new(
-            self.execution_tx.clone(),
-            self.symbol_id_map.clone(),
-        );
+        let binance =
+            binance::BinanceAdapter::new(self.execution_tx.clone(), self.symbol_id_map.clone());
         tokio::spawn(binance.run());
 
         // Spawn KuCoin adapter
-        let kucoin = kucoin::KucoinAdapter::new(
-            self.execution_tx.clone(),
-            self.symbol_id_map.clone(),
-        );
+        let kucoin =
+            kucoin::KucoinAdapter::new(self.execution_tx.clone(), self.symbol_id_map.clone());
         tokio::spawn(kucoin.run());
     }
 }

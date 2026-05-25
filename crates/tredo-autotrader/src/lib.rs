@@ -1,7 +1,7 @@
+pub mod config;
 pub mod loop_engine;
 pub mod regime;
-pub mod config;
 
-pub use loop_engine::{AutoTradingLoop, TradingState, TradeAction, DecisionOutcome};
-pub use regime::{MarketRegime, RegimeDetector};
 pub use config::AutoTradingConfig;
+pub use loop_engine::{AutoTradingLoop, DecisionOutcome, TradeAction, TradingState};
+pub use regime::{MarketRegime, RegimeDetector};

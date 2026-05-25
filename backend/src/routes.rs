@@ -1,36 +1,35 @@
 use axum::{
-    routing::{get, post},
-    Router,
-    Json,
-    extract::{State, WebSocketUpgrade, ws::{Message, WebSocket}},
-    response::IntoResponse,
+    extract::{
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
+    },
     http::Method,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
 };
-use tower_http::cors::{CorsLayer, Any};
-use tokio::sync::mpsc;
+use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::json;
-use futures::{stream::StreamExt, sink::SinkExt};
+use tokio::sync::mpsc;
+use tower_http::cors::{Any, CorsLayer};
+use tredo_skills::{Candle, MarketAnalysisContext};
 use tredo_types::{ExecutionCommand, ManualOverrideRequest};
-use tredo_skills::{MarketAnalysisContext, Candle};
 
-use std::sync::Arc;
-use tredo_intelligence::IntelligencePool;
-use tredo_mcp::{ArkMcpServerWithResources, McpState};
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
-use tredo_tantra::TantraService;
-use tredo_core::PluginRegistry;
-use tredo_data::{YahooFinanceProvider, MarketDataProvider, TimeFrame};
-use tredo_journal::TradeJournal;
-use tredo_autotrader::{AutoTradingLoop, AutoTradingConfig};
-use tredo_learning::LearningEngine;
-use tredo_stream::{StreamRegistry, StreamMessage};
-use tredo_bridge::{
-    RedisBridge, AgentRegistry,
-    TieredCache, HierarchicalRAG, SharedMemory,
-};
+use std::sync::Arc;
 use tokio::sync::Mutex;
+use tredo_autotrader::{AutoTradingConfig, AutoTradingLoop};
+use tredo_bridge::{AgentRegistry, HierarchicalRAG, RedisBridge, SharedMemory, TieredCache};
+use tredo_core::PluginRegistry;
+use tredo_data::{MarketDataProvider, TimeFrame, YahooFinanceProvider};
+use tredo_intelligence::IntelligencePool;
+use tredo_journal::TradeJournal;
+use tredo_learning::LearningEngine;
+use tredo_mcp::{ArkMcpServerWithResources, McpState};
+use tredo_stream::{StreamMessage, StreamRegistry};
+use tredo_tantra::TantraService;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -57,7 +56,13 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers(Any);
 
     Router::new()
@@ -71,7 +76,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/tantra/status", get(tantra_status))
         .route("/api/tantra/calendar", get(tantra_calendar))
         .route("/api/tantra/dnd", post(tantra_set_dnd))
-        .route("/api/tantra/tasks", get(tantra_get_tasks).post(tantra_resolve_task))
+        .route(
+            "/api/tantra/tasks",
+            get(tantra_get_tasks).post(tantra_resolve_task),
+        )
         // Skills
         .route("/api/skills/list", get(skills_list))
         .route("/api/skills/agents", get(skills_agents))
@@ -83,13 +91,22 @@ pub fn router(state: AppState) -> Router {
         .route("/api/journal/stats", get(journal_stats))
         .route("/api/journal/trades", post(journal_trades))
         .route("/api/journal/decisions", get(journal_decisions))
-        .route("/api/journal/strategy-win-rates", get(journal_strategy_win_rates))
-        .route("/api/journal/regime-win-rates", get(journal_regime_win_rates))
+        .route(
+            "/api/journal/strategy-win-rates",
+            get(journal_strategy_win_rates),
+        )
+        .route(
+            "/api/journal/regime-win-rates",
+            get(journal_regime_win_rates),
+        )
         // Auto-Trading
         .route("/api/autotrade/status", get(autotrade_status))
         .route("/api/autotrade/start", post(autotrade_start))
         .route("/api/autotrade/stop", post(autotrade_stop))
-        .route("/api/autotrade/config", get(autotrade_get_config).post(autotrade_update_config))
+        .route(
+            "/api/autotrade/config",
+            get(autotrade_get_config).post(autotrade_update_config),
+        )
         // Learning Engine
         .route("/api/learning/skills", get(learning_skills))
         .route("/api/learning/top-skills", get(learning_top_skills))
@@ -117,9 +134,10 @@ pub fn router(state: AppState) -> Router {
         .nest_service("/api/mcp", {
             let mcp_state = state.mcp_state.clone();
             let mcp_server = ArkMcpServerWithResources::new(mcp_state);
-            let mcp_service_factory = move || -> Result<ArkMcpServerWithResources, std::io::Error> {
-                Ok(mcp_server.clone())
-            };
+            let mcp_service_factory =
+                move || -> Result<ArkMcpServerWithResources, std::io::Error> {
+                    Ok(mcp_server.clone())
+                };
             StreamableHttpService::<ArkMcpServerWithResources, LocalSessionManager>::new(
                 mcp_service_factory,
                 std::sync::Arc::new(LocalSessionManager::default()),
@@ -273,7 +291,7 @@ async fn manual_override(
 #[derive(serde::Deserialize, Clone)]
 struct GoogleTradingRequest {
     symbol: String,
-    action: String,   // "BUY" or "SELL"
+    action: String, // "BUY" or "SELL"
     amount: f64,
     price: Option<f64>,
     bypass_safety: Option<bool>,
@@ -281,8 +299,8 @@ struct GoogleTradingRequest {
 
 #[derive(serde::Deserialize)]
 struct GeminiConfirmationResponse {
-    status: String,       // "Approved" or "Rejected"
-    conviction: f64,      // 0.0 to 1.0
+    status: String,  // "Approved" or "Rejected"
+    conviction: f64, // 0.0 to 1.0
     reasoning: String,
 }
 
@@ -297,7 +315,11 @@ async fn google_trading_webhook(
 
     // 1. Fetch historical candles for Technical/Chart analysis
     let timeframe = TimeFrame::Hour1;
-    let candles = match state.data_provider.fetch_candles(&payload.symbol, timeframe).await {
+    let candles = match state
+        .data_provider
+        .fetch_candles(&payload.symbol, timeframe)
+        .await
+    {
         Ok(c) => c,
         Err(e) => {
             eprintln!("[GoogleTradingWebhook] Failed to fetch candles: {}", e);
@@ -305,7 +327,10 @@ async fn google_trading_webhook(
         }
     };
 
-    let current_price = payload.price.or_else(|| candles.last().map(|c| c.close)).unwrap_or(100.0);
+    let current_price = payload
+        .price
+        .or_else(|| candles.last().map(|c| c.close))
+        .unwrap_or(100.0);
 
     // 2. Technical Analysis / Skills check
     let context = MarketAnalysisContext {
@@ -333,7 +358,11 @@ async fn google_trading_webhook(
         false
     } else {
         for entry in state.tantra.events.iter() {
-            active_events.push(format!("{} (DND: {})", entry.value().title, entry.value().is_dnd));
+            active_events.push(format!(
+                "{} (DND: {})",
+                entry.value().title,
+                entry.value().is_dnd
+            ));
         }
         state.tantra.is_dnd_active()
     };
@@ -371,7 +400,9 @@ async fn google_trading_webhook(
                 if let Some(pnl) = t.pnl {
                     total_closed_pnl += pnl;
                     closed_count += 1;
-                    if pnl > 0.0 { wins += 1; }
+                    if pnl > 0.0 {
+                        wins += 1;
+                    }
                 }
             }
             if closed_count > 0 {
@@ -393,7 +424,10 @@ async fn google_trading_webhook(
     let previous_trade_summary = if previous_outcomes.is_empty() {
         String::new()
     } else {
-        format!("\n         TRADE OUTCOME HISTORY:\n             {}", previous_outcomes.join("\n             "))
+        format!(
+            "\n         TRADE OUTCOME HISTORY:\n             {}",
+            previous_outcomes.join("\n             ")
+        )
     };
 
     // 6. Build prompt explaining scenarios to Gemini for confirmation
@@ -434,41 +468,75 @@ async fn google_trading_webhook(
     // 7. Explain scenarios to Gemini LLM for confirmation
     let gemini_llm = state.registry.get_llm("gemini");
     let (status, conviction, reasoning) = if let Some(gemini) = gemini_llm {
-        match gemini.complete(&prompt, Some("HFT analyst. Reply JSON only."), None).await {
+        match gemini
+            .complete(&prompt, Some("HFT analyst. Reply JSON only."), None)
+            .await
+        {
             Ok(reply) => {
-                println!("[GoogleTradingWebhook] Gemini confirmation reply: {}", reply);
+                println!(
+                    "[GoogleTradingWebhook] Gemini confirmation reply: {}",
+                    reply
+                );
                 if let Ok(parsed) = serde_json::from_str::<GeminiConfirmationResponse>(&reply) {
                     (parsed.status, parsed.conviction, parsed.reasoning)
                 } else {
                     if reply.contains("Approved") || reply.contains("APPROVED") {
-                        ("Approved".to_string(), 0.75, "Auto-approved via confirmation fallback parsing".to_string())
+                        (
+                            "Approved".to_string(),
+                            0.75,
+                            "Auto-approved via confirmation fallback parsing".to_string(),
+                        )
                     } else {
-                        ("Rejected".to_string(), 0.1, "Rejected due to confirmation fallback failure".to_string())
+                        (
+                            "Rejected".to_string(),
+                            0.1,
+                            "Rejected due to confirmation fallback failure".to_string(),
+                        )
                     }
                 }
             }
             Err(e) => {
                 eprintln!("[GoogleTradingWebhook] Gemini query failed: {}", e);
-                ("Rejected".to_string(), 0.0, "Gemini confirmation API call failed".to_string())
+                (
+                    "Rejected".to_string(),
+                    0.0,
+                    "Gemini confirmation API call failed".to_string(),
+                )
             }
         }
     } else {
         eprintln!("[GoogleTradingWebhook] Gemini LLM provider not registered in plugin registry");
-        ("Rejected".to_string(), 0.0, "Gemini confirmation LLM provider not found".to_string())
+        (
+            "Rejected".to_string(),
+            0.0,
+            "Gemini confirmation LLM provider not found".to_string(),
+        )
     };
 
     let approved = status == "Approved" || status == "APPROVED";
 
     // 8. Persistent logging in SQLite Trade Journal
-    let action_side = if payload.action.to_uppercase() == "BUY" { "BUY" } else { "SELL" };
+    let action_side = if payload.action.to_uppercase() == "BUY" {
+        "BUY"
+    } else {
+        "SELL"
+    };
     let decision_rec = tredo_journal::DecisionRecord {
         id: uuid::Uuid::new_v4().to_string(),
         symbol: payload.symbol.clone(),
         timestamp: chrono::Utc::now(),
         overall_conviction: conviction,
-        overall_direction: if approved { action_side.to_string() } else { "REJECTED".to_string() },
+        overall_direction: if approved {
+            action_side.to_string()
+        } else {
+            "REJECTED".to_string()
+        },
         market_regime: "trending_bullish".to_string(),
-        action_taken: if approved { action_side.to_string() } else { "SKIP".to_string() },
+        action_taken: if approved {
+            action_side.to_string()
+        } else {
+            "SKIP".to_string()
+        },
         reason: reasoning.clone(),
         bullish_signals: technical_analysis.bullish_signals,
         bearish_signals: technical_analysis.bearish_signals,
@@ -489,11 +557,18 @@ async fn google_trading_webhook(
             timestamp: chrono::Utc::now(),
         };
 
-        let _ = state.execution_tx.send(ExecutionCommand::Execute(decision)).await;
+        let _ = state
+            .execution_tx
+            .send(ExecutionCommand::Execute(decision))
+            .await;
 
         state.stream_registry.global().alert(
             "success",
-            &format!("🟢 Auto-Traded {} {} via Google API + Gemini Confirmation!", payload.action.to_uppercase(), payload.symbol)
+            &format!(
+                "🟢 Auto-Traded {} {} via Google API + Gemini Confirmation!",
+                payload.action.to_uppercase(),
+                payload.symbol
+            ),
         );
 
         Json(json!({
@@ -511,7 +586,10 @@ async fn google_trading_webhook(
     } else {
         state.stream_registry.global().alert(
             "warning",
-            &format!("🔴 Rejected Google cTrading call for {} due to Gemini Safety Lock", payload.symbol)
+            &format!(
+                "🔴 Rejected Google cTrading call for {} due to Gemini Safety Lock",
+                payload.symbol
+            ),
         );
 
         Json(json!({
@@ -592,7 +670,10 @@ async fn skills_analyze(
     };
 
     // Run both flat analysis and orchestrated sub-agent analysis
-    let analysis = state.intelligence.analyze_with_skills(context.clone()).await;
+    let analysis = state
+        .intelligence
+        .analyze_with_skills(context.clone())
+        .await;
     let orchestrated = state.intelligence.analyze_orchestrated(&context).await;
 
     Json(json!({
@@ -624,14 +705,23 @@ async fn market_candles(
         _ => TimeFrame::Hour1,
     };
 
-    match state.data_provider.fetch_candles(&payload.symbol, timeframe).await {
+    match state
+        .data_provider
+        .fetch_candles(&payload.symbol, timeframe)
+        .await
+    {
         Ok(candles) => {
             // Broadcast to WebSocket
             state.stream_registry.broadcast(
                 Some(&payload.symbol),
                 StreamMessage::Alert {
                     severity: "info".to_string(),
-                    message: format!("Fetched {} {} candles for {}", candles.len(), timeframe.label(), payload.symbol),
+                    message: format!(
+                        "Fetched {} {} candles for {}",
+                        candles.len(),
+                        timeframe.label(),
+                        payload.symbol
+                    ),
                     timestamp: chrono::Utc::now(),
                 },
             );
@@ -660,7 +750,11 @@ async fn market_price(
     State(state): State<AppState>,
     Json(payload): Json<MarketPriceRequest>,
 ) -> impl IntoResponse {
-    match state.data_provider.fetch_current_price(&payload.symbol).await {
+    match state
+        .data_provider
+        .fetch_current_price(&payload.symbol)
+        .await
+    {
         Ok(price) => {
             // Broadcast price tick to WebSocket
             state.stream_registry.broadcast(
@@ -757,13 +851,19 @@ async fn autotrade_status(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn autotrade_start(State(state): State<AppState>) -> impl IntoResponse {
     state.auto_trader.set_enabled(true).await;
-    state.stream_registry.global().alert("success", "Auto-trading started");
+    state
+        .stream_registry
+        .global()
+        .alert("success", "Auto-trading started");
     Json(json!({ "status": "success", "message": "Auto-trading started"}))
 }
 
 async fn autotrade_stop(State(state): State<AppState>) -> impl IntoResponse {
     state.auto_trader.set_enabled(false).await;
-    state.stream_registry.global().alert("warning", "Auto-trading stopped");
+    state
+        .stream_registry
+        .global()
+        .alert("warning", "Auto-trading stopped");
     Json(json!({ "status": "success", "message": "Auto-trading stopped"}))
 }
 
@@ -800,11 +900,16 @@ async fn autotrade_update_config(
         enabled: payload.enabled.unwrap_or(current.enabled),
         paper_trading: payload.paper_trading.unwrap_or(current.paper_trading),
         symbols: payload.symbols.unwrap_or(current.symbols),
-        analysis_interval_secs: payload.analysis_interval_secs.unwrap_or(current.analysis_interval_secs),
+        analysis_interval_secs: payload
+            .analysis_interval_secs
+            .unwrap_or(current.analysis_interval_secs),
         ..Default::default()
     };
     state.auto_trader.update_config(config).await;
-    state.stream_registry.global().alert("info", "Auto-trading configuration updated");
+    state
+        .stream_registry
+        .global()
+        .alert("info", "Auto-trading configuration updated");
     Json(json!({ "status": "success", "message": "Configuration updated" }))
 }
 
@@ -915,11 +1020,15 @@ async fn bridge_rag_search(
     State(state): State<AppState>,
     Json(payload): Json<RAGSearchRequest>,
 ) -> impl IntoResponse {
-    match state.rag_db.search(
-        &payload.query,
-        payload.agent_id.as_deref(),
-        payload.limit.unwrap_or(10),
-    ).await {
+    match state
+        .rag_db
+        .search(
+            &payload.query,
+            payload.agent_id.as_deref(),
+            payload.limit.unwrap_or(10),
+        )
+        .await
+    {
         Ok(results) => Json(json!({
             "status": "success",
             "results": results,
@@ -943,11 +1052,11 @@ async fn bridge_store(
     State(state): State<AppState>,
     Json(payload): Json<BridgeStoreRequest>,
 ) -> impl IntoResponse {
-    match state.shared_memory.write(
-        &payload.namespace,
-        &payload.key,
-        payload.value,
-    ).await {
+    match state
+        .shared_memory
+        .write(&payload.namespace, &payload.key, payload.value)
+        .await
+    {
         Ok(block) => Json(json!({
             "status": "success",
             "block_id": block.id,
@@ -970,10 +1079,11 @@ async fn bridge_read(
     State(state): State<AppState>,
     Json(payload): Json<BridgeReadRequest>,
 ) -> impl IntoResponse {
-    match state.shared_memory.read(
-        &payload.namespace,
-        &payload.key,
-    ).await {
+    match state
+        .shared_memory
+        .read(&payload.namespace, &payload.key)
+        .await
+    {
         Ok(Some(block)) => Json(json!({
             "status": "success",
             "block": block
@@ -1048,7 +1158,10 @@ async fn providers_swap_agent(
     if let Some(agent) = state.registry.get_agent(&payload.name) {
         let name = agent.provider_name().to_string();
         state.intelligence.swap_agent(agent);
-        println!("[ProviderManager] 🔄 Agent provider hot-swapped to '{}'", payload.name);
+        println!(
+            "[ProviderManager] 🔄 Agent provider hot-swapped to '{}'",
+            payload.name
+        );
         Json(json!({
             "status": "success",
             "message": format!("Agent provider hot-swapped to '{}'", payload.name),
@@ -1078,7 +1191,10 @@ async fn providers_swap_llm(
     if let Some(llm) = state.registry.get_llm(&payload.name) {
         let name = llm.provider_name().to_string();
         state.intelligence.swap_llm(llm);
-        println!("[ProviderManager] 🔄 LLM provider hot-swapped to '{}'", payload.name);
+        println!(
+            "[ProviderManager] 🔄 LLM provider hot-swapped to '{}'",
+            payload.name
+        );
         Json(json!({
             "status": "success",
             "message": format!("LLM provider hot-swapped to '{}'", payload.name),
@@ -1097,16 +1213,16 @@ async fn providers_swap_llm(
 async fn learning_reset(State(state): State<AppState>) -> impl IntoResponse {
     let mut engine = state.learning_engine.lock().await;
     engine.reset();
-    state.stream_registry.global().alert("info", "Learning engine reset");
+    state
+        .stream_registry
+        .global()
+        .alert("info", "Learning engine reset");
     Json(json!({ "status": "success", "message": "Learning engine reset successfully" }))
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -1114,7 +1230,10 @@ async fn ws_handler(
 /// and forwards all stream messages to the client as JSON.
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
     println!("[WebSocket] Client connected, subscribing to broadcast hub");
-    state.stream_registry.global().alert("info", "WebSocket client connected");
+    state
+        .stream_registry
+        .global()
+        .alert("info", "WebSocket client connected");
 
     let mut rx = state.stream_registry.global().subscribe();
 
@@ -1180,7 +1299,14 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     "type": "ack",
                     "data": { "received": true, "message": text }
                 });
-                if ws_tx.send(Message::Text(serde_json::to_string(&ack).expect("ACK JSON serialization should not fail"))).await.is_err() {
+                if ws_tx
+                    .send(Message::Text(
+                        serde_json::to_string(&ack)
+                            .expect("ACK JSON serialization should not fail"),
+                    ))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -1195,5 +1321,8 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     // Cleanup
     broadcast_task.abort();
     println!("[WebSocket] Client disconnected");
-    state.stream_registry.global().alert("info", "WebSocket client disconnected");
+    state
+        .stream_registry
+        .global()
+        .alert("info", "WebSocket client disconnected");
 }

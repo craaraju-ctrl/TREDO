@@ -3,7 +3,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use std::time::Duration;
 
-use tredo_core::{LLMProvider, LLMParams, ProviderError};
+use tredo_core::{LLMParams, LLMProvider, ProviderError};
 
 /// Ollama LLM Provider — plugs into the PluginRegistry as a replaceable local LLM backend.
 ///
@@ -54,9 +54,9 @@ impl LLMProvider for OllamaLLM {
         params: Option<LLMParams>,
     ) -> Result<String, ProviderError> {
         let url = format!("{}/api/generate", self.endpoint);
-        
+
         let temperature = params.as_ref().map(|p| p.temperature).unwrap_or(0.2);
-        
+
         let mut req_body = serde_json::json!({
             "model": self.model,
             "prompt": prompt,
@@ -87,14 +87,13 @@ impl LLMProvider for OllamaLLM {
             )));
         }
 
-        let ollama_resp: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::AnalysisError(format!("Failed to parse Ollama JSON: {}", e)))?;
+        let ollama_resp: serde_json::Value = resp.json().await.map_err(|e| {
+            ProviderError::AnalysisError(format!("Failed to parse Ollama JSON: {}", e))
+        })?;
 
-        let response_text = ollama_resp["response"]
-            .as_str()
-            .ok_or_else(|| ProviderError::AnalysisError("Ollama response field is missing or empty".to_string()))?;
+        let response_text = ollama_resp["response"].as_str().ok_or_else(|| {
+            ProviderError::AnalysisError("Ollama response field is missing or empty".to_string())
+        })?;
 
         Ok(response_text.to_string())
     }
@@ -106,9 +105,9 @@ impl LLMProvider for OllamaLLM {
         params: Option<LLMParams>,
     ) -> Result<BoxStream<'static, String>, ProviderError> {
         let url = format!("{}/api/generate", self.endpoint);
-        
+
         let temperature = params.as_ref().map(|p| p.temperature).unwrap_or(0.2);
-        
+
         let mut req_body = serde_json::json!({
             "model": self.model,
             "prompt": prompt,
@@ -140,7 +139,7 @@ impl LLMProvider for OllamaLLM {
                 match chunk {
                     Ok(bytes) => {
                         buffer.extend_from_slice(&bytes);
-                        
+
                         // Parse line by line
                         while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
                             let line_bytes = buffer.drain(..=pos).collect::<Vec<u8>>();
@@ -186,7 +185,12 @@ impl LLMProvider for OllamaLLM {
                 .json(&req_body)
                 .send()
                 .await
-                .map_err(|e| ProviderError::ConnectionError(format!("Ollama embedding request failed: {}", e)))?;
+                .map_err(|e| {
+                    ProviderError::ConnectionError(format!(
+                        "Ollama embedding request failed: {}",
+                        e
+                    ))
+                })?;
 
             let status = resp.status();
             if !status.is_success() {
@@ -197,10 +201,12 @@ impl LLMProvider for OllamaLLM {
                 )));
             }
 
-            let embedding_resp: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| ProviderError::AnalysisError(format!("Failed to parse Ollama embedding response: {}", e)))?;
+            let embedding_resp: serde_json::Value = resp.json().await.map_err(|e| {
+                ProviderError::AnalysisError(format!(
+                    "Failed to parse Ollama embedding response: {}",
+                    e
+                ))
+            })?;
 
             // Ollama embed response contains a "embeddings" field which is a 2D array if list input, or "embedding" if singular.
             // Let's support both.
@@ -219,7 +225,9 @@ impl LLMProvider for OllamaLLM {
                 continue;
             }
 
-            return Err(ProviderError::AnalysisError("Failed to extract embedding from Ollama response".to_string()));
+            return Err(ProviderError::AnalysisError(
+                "Failed to extract embedding from Ollama response".to_string(),
+            ));
         }
 
         Ok(embeddings)

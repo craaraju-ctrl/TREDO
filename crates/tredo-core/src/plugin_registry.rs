@@ -24,11 +24,7 @@ pub trait PluginRegistry: Send + Sync {
     fn get_agent(&self, name: &str) -> Option<Arc<dyn AgentProvider>>;
 
     /// Register an LLM provider under a given name
-    fn register_llm(
-        &self,
-        name: &str,
-        llm: Arc<dyn LLMProvider>,
-    ) -> Result<(), ProviderError>;
+    fn register_llm(&self, name: &str, llm: Arc<dyn LLMProvider>) -> Result<(), ProviderError>;
 
     /// Get an LLM provider by name
     fn get_llm(&self, name: &str) -> Option<Arc<dyn LLMProvider>>;
@@ -86,11 +82,7 @@ impl PluginRegistry for DefaultPluginRegistry {
         agents.get(name).cloned()
     }
 
-    fn register_llm(
-        &self,
-        name: &str,
-        llm: Arc<dyn LLMProvider>,
-    ) -> Result<(), ProviderError> {
+    fn register_llm(&self, name: &str, llm: Arc<dyn LLMProvider>) -> Result<(), ProviderError> {
         let mut llms = self.llms.write().expect("LLMs RwLock poisoned");
         llms.insert(name.to_string(), llm);
         Ok(())

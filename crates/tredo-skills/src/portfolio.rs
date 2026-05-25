@@ -1,6 +1,7 @@
-use crate::{MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal, TradingSkill};
+use crate::{
+    MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal, TradingSkill,
+};
 use std::collections::HashMap;
-
 
 // ── 1. Diversification Skill ──────────────────────────────────────────────
 
@@ -20,10 +21,18 @@ impl Default for DiversificationSkill {
 
 #[async_trait::async_trait]
 impl TradingSkill for DiversificationSkill {
-    fn id(&self) -> &'static str { "diversification" }
-    fn name(&self) -> &'static str { "Diversification Analysis" }
-    fn description(&self) -> &'static str { "Analyzes portfolio diversification and concentration risk across assets" }
-    fn category(&self) -> SkillCategory { SkillCategory::PortfolioAnalysis }
+    fn id(&self) -> &'static str {
+        "diversification"
+    }
+    fn name(&self) -> &'static str {
+        "Diversification Analysis"
+    }
+    fn description(&self) -> &'static str {
+        "Analyzes portfolio diversification and concentration risk across assets"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::PortfolioAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let total_positions_value: f64 = context.open_positions.values().sum();
@@ -35,7 +44,9 @@ impl TradingSkill for DiversificationSkill {
 
         let num_assets = context.open_positions.len();
         let cash_pct = (context.cash_available / total_value) * 100.0;
-        let max_concentration = context.open_positions.values()
+        let max_concentration = context
+            .open_positions
+            .values()
             .map(|v| (v / total_value) * 100.0)
             .fold(0.0f64, f64::max);
 
@@ -56,9 +67,9 @@ impl TradingSkill for DiversificationSkill {
         }
 
         let direction = if issues.is_empty() && num_assets >= self.min_assets_for_diversification {
-            SignalDirection::Bullish  // Well diversified
+            SignalDirection::Bullish // Well diversified
         } else if !issues.is_empty() {
-            SignalDirection::Bearish  // Needs attention
+            SignalDirection::Bearish // Needs attention
         } else {
             SignalDirection::Neutral
         };
@@ -76,7 +87,8 @@ impl TradingSkill for DiversificationSkill {
         indicators.insert("total_value".to_string(), total_value);
 
         let details = if num_assets == 0 {
-            "Portfolio is 100% cash — no diversification concern but no market exposure.".to_string()
+            "Portfolio is 100% cash — no diversification concern but no market exposure."
+                .to_string()
         } else if issues.is_empty() {
             format!(
                 "Portfolio: {} assets, max concentration {:.1}%, cash {:.1}%. Well diversified ✓.",
@@ -105,10 +117,18 @@ pub struct PortfolioHealthSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for PortfolioHealthSkill {
-    fn id(&self) -> &'static str { "portfolio_health" }
-    fn name(&self) -> &'static str { "Portfolio Health Score" }
-    fn description(&self) -> &'static str { "Calculates an overall health score considering returns, risk, and allocation" }
-    fn category(&self) -> SkillCategory { SkillCategory::PortfolioAnalysis }
+    fn id(&self) -> &'static str {
+        "portfolio_health"
+    }
+    fn name(&self) -> &'static str {
+        "Portfolio Health Score"
+    }
+    fn description(&self) -> &'static str {
+        "Calculates an overall health score considering returns, risk, and allocation"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::PortfolioAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let total_positions: f64 = context.open_positions.values().sum();
@@ -152,7 +172,7 @@ impl TradingSkill for PortfolioHealthSkill {
         if (0.2..=0.4).contains(&cash_buffer) {
             score += 15.0;
         } else if cash_buffer > 0.4 {
-            score += 5.0;  // Too much cash = opportunity cost
+            score += 5.0; // Too much cash = opportunity cost
         } else if cash_buffer < 0.1 {
             score -= 10.0; // Too little cash = risky
         }
@@ -195,10 +215,16 @@ impl TradingSkill for PortfolioHealthSkill {
             confidence: 0.7,
             details: format!(
                 "Portfolio Health Score: {:.0}/100. Exposure: {:.1}%, Cash: {:.1}%. {}.",
-                clamped_score, exposure_ratio * 100.0, cash_buffer * 100.0,
-                if clamped_score >= 70.0 { "Healthy portfolio structure" }
-                else if clamped_score >= 40.0 { "Moderate — consider rebalancing" }
-                else { "⚠️ Needs attention — high risk structure" }
+                clamped_score,
+                exposure_ratio * 100.0,
+                cash_buffer * 100.0,
+                if clamped_score >= 70.0 {
+                    "Healthy portfolio structure"
+                } else if clamped_score >= 40.0 {
+                    "Moderate — consider rebalancing"
+                } else {
+                    "⚠️ Needs attention — high risk structure"
+                }
             ),
             indicators,
             time_frame: "current".to_string(),
@@ -212,21 +238,29 @@ pub struct CorrelationRiskSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for CorrelationRiskSkill {
-    fn id(&self) -> &'static str { "correlation_risk" }
-    fn name(&self) -> &'static str { "Correlation Risk" }
-    fn description(&self) -> &'static str { "Analyzes correlation between portfolio holdings to identify hidden concentration risk" }
-    fn category(&self) -> SkillCategory { SkillCategory::PortfolioAnalysis }
+    fn id(&self) -> &'static str {
+        "correlation_risk"
+    }
+    fn name(&self) -> &'static str {
+        "Correlation Risk"
+    }
+    fn description(&self) -> &'static str {
+        "Analyzes correlation between portfolio holdings to identify hidden concentration risk"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::PortfolioAnalysis
+    }
 
     async fn analyze(&self, _context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         // For now, this is a simplified analysis based on asset types
         // A full implementation would use historical price correlation matrices
-        
+
         let num_positions = _context.open_positions.len() as f64;
 
         // Estimate correlation risk based on position count alone
         // More positions with fewer assets = higher correlation risk
         let estimated_correlation = if num_positions <= 1.0 {
-            0.9  // Single asset = high self-correlation
+            0.9 // Single asset = high self-correlation
         } else if num_positions <= 3.0 {
             0.6
         } else {
@@ -234,9 +268,9 @@ impl TradingSkill for CorrelationRiskSkill {
         };
 
         let direction = if estimated_correlation > 0.7 {
-            SignalDirection::Bearish  // High correlation = high risk
+            SignalDirection::Bearish // High correlation = high risk
         } else if estimated_correlation < 0.4 {
-            SignalDirection::Bullish  // Low correlation = well hedged
+            SignalDirection::Bullish // Low correlation = well hedged
         } else {
             SignalDirection::Neutral
         };
@@ -254,9 +288,13 @@ impl TradingSkill for CorrelationRiskSkill {
             details: format!(
                 "Estimated portfolio correlation: {:.2}. {} correlation risk — {}.",
                 estimated_correlation,
-                if estimated_correlation > 0.7 { "HIGH" }
-                else if estimated_correlation < 0.4 { "LOW" }
-                else { "MODERATE" },
+                if estimated_correlation > 0.7 {
+                    "HIGH"
+                } else if estimated_correlation < 0.4 {
+                    "LOW"
+                } else {
+                    "MODERATE"
+                },
                 if num_positions <= 1.0 {
                     "Single asset portfolio — highly concentrated"
                 } else if num_positions <= 3.0 {

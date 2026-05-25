@@ -2,8 +2,8 @@ pub mod yahoo;
 
 pub use yahoo::YahooFinanceProvider;
 
-use tredo_skills::Candle;
 use chrono::{DateTime, Utc};
+use tredo_skills::Candle;
 
 /// Supported time frames for market data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -25,7 +25,7 @@ impl TimeFrame {
             TimeFrame::Min15 => "15m",
             TimeFrame::Min30 => "30m",
             TimeFrame::Hour1 => "60m",
-            TimeFrame::Hour4 => "1h",  // Yahoo uses 1h for 1-hour; 4h not supported, use 1d
+            TimeFrame::Hour4 => "1h", // Yahoo uses 1h for 1-hour; 4h not supported, use 1d
             TimeFrame::Day1 => "1d",
         }
     }
@@ -68,13 +68,21 @@ pub struct MarketDataPoint {
 #[async_trait::async_trait]
 pub trait MarketDataProvider: Send + Sync {
     /// Fetch OHLCV candles for a symbol at the given time frame
-    async fn fetch_candles(&self, symbol: &str, timeframe: TimeFrame) -> Result<Vec<Candle>, String>;
+    async fn fetch_candles(
+        &self,
+        symbol: &str,
+        timeframe: TimeFrame,
+    ) -> Result<Vec<Candle>, String>;
 
     /// Fetch current price for a symbol
     async fn fetch_current_price(&self, symbol: &str) -> Result<f64, String>;
 
     /// Fetch multiple timeframes at once
-    async fn fetch_multi_timeframe(&self, symbol: &str, timeframes: &[TimeFrame]) -> Vec<MarketDataPoint> {
+    async fn fetch_multi_timeframe(
+        &self,
+        symbol: &str,
+        timeframes: &[TimeFrame],
+    ) -> Vec<MarketDataPoint> {
         let mut results = Vec::new();
         for tf in timeframes {
             match self.fetch_candles(symbol, *tf).await {
@@ -87,7 +95,12 @@ pub trait MarketDataProvider: Send + Sync {
                     });
                 }
                 Err(e) => {
-                    eprintln!("[MarketData] Failed to fetch {} {}: {}", symbol, tf.label(), e);
+                    eprintln!(
+                        "[MarketData] Failed to fetch {} {}: {}",
+                        symbol,
+                        tf.label(),
+                        e
+                    );
                 }
             }
         }

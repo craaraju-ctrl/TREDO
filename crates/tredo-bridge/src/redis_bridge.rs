@@ -146,7 +146,14 @@ impl RedisBridge {
         Self {
             conn: Arc::new(Mutex::new(None)),
             redis_url: redis_url.unwrap_or_else(|| DEFAULT_REDIS_URL.to_string()),
-            bridge_id: format!("rust-tredo-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0")),
+            bridge_id: format!(
+                "rust-tredo-{}",
+                uuid::Uuid::new_v4()
+                    .to_string()
+                    .split('-')
+                    .next()
+                    .unwrap_or("0")
+            ),
             stats: Arc::new(Mutex::new(BridgeStats {
                 messages_sent: 0,
                 messages_received: 0,
@@ -205,7 +212,9 @@ impl RedisBridge {
     }
 
     /// Get a usable Redis connection (auto-reconnects if needed)
-    async fn get_conn(&self) -> Result<tokio::sync::MutexGuard<'_, Option<ConnectionManager>>, String> {
+    async fn get_conn(
+        &self,
+    ) -> Result<tokio::sync::MutexGuard<'_, Option<ConnectionManager>>, String> {
         {
             let guard = self.conn.lock().await;
             if guard.is_some() {
@@ -224,10 +233,12 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        let payload = serde_json::to_string(message)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+        let payload =
+            serde_json::to_string(message).map_err(|e| format!("Serialize error: {}", e))?;
 
-        let count: u64 = conn.publish(channel, payload).await
+        let count: u64 = conn
+            .publish(channel, payload)
+            .await
             .map_err(|e| format!("Publish error: {}", e))?;
 
         // Track stats
@@ -235,7 +246,10 @@ impl RedisBridge {
             stats.messages_sent += 1;
         }
 
-        info!("[RedisBridge] Published to {} ({} subscribers)", channel, count);
+        info!(
+            "[RedisBridge] Published to {} ({} subscribers)",
+            channel, count
+        );
         Ok(count)
     }
 
@@ -255,7 +269,9 @@ impl RedisBridge {
             .map_err(|e| format!("Failed to get async connection: {}", e))?;
 
         let mut pubsub = conn.into_pubsub();
-        pubsub.subscribe(channel).await
+        pubsub
+            .subscribe(channel)
+            .await
             .map_err(|e| format!("Subscribe error: {}", e))?;
 
         let channel_name = channel.to_string();
@@ -275,7 +291,10 @@ impl RedisBridge {
                     callback(bus_msg).await;
                 }
             }
-            error!("[RedisBridge] Subscription stream ended for {}", channel_name);
+            error!(
+                "[RedisBridge] Subscription stream ended for {}",
+                channel_name
+            );
         });
 
         self.subscriptions.lock().await.push(handle);
@@ -289,7 +308,8 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        conn.hset::<_, _, _, ()>(StateKeys::SHARED_MEMORY, key, value).await
+        conn.hset::<_, _, _, ()>(StateKeys::SHARED_MEMORY, key, value)
+            .await
             .map_err(|e| format!("HSET error: {}", e))?;
 
         Ok(())
@@ -300,7 +320,9 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        let val: Option<String> = conn.hget(StateKeys::SHARED_MEMORY, key).await
+        let val: Option<String> = conn
+            .hget(StateKeys::SHARED_MEMORY, key)
+            .await
             .map_err(|e| format!("HGET error: {}", e))?;
 
         if val.is_some() {
@@ -321,7 +343,9 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        let entries: Vec<(String, String)> = conn.hgetall(StateKeys::SHARED_MEMORY).await
+        let entries: Vec<(String, String)> = conn
+            .hgetall(StateKeys::SHARED_MEMORY)
+            .await
             .map_err(|e| format!("HGETALL error: {}", e))?;
 
         Ok(entries)
@@ -334,7 +358,8 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        conn.set_ex::<_, _, ()>(StateKeys::cache_key(key), value, ttl_secs).await
+        conn.set_ex::<_, _, ()>(StateKeys::cache_key(key), value, ttl_secs)
+            .await
             .map_err(|e| format!("Cache SET error: {}", e))?;
 
         Ok(())
@@ -345,7 +370,9 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        let val: Option<String> = conn.get(StateKeys::cache_key(key)).await
+        let val: Option<String> = conn
+            .get(StateKeys::cache_key(key))
+            .await
             .map_err(|e| format!("Cache GET error: {}", e))?;
 
         if val.is_some() {
@@ -368,7 +395,9 @@ impl RedisBridge {
         let mut guard = self.get_conn().await?;
         let conn = guard.as_mut().ok_or("No Redis connection")?;
 
-        let keys: Vec<String> = conn.keys("nethra:heartbeat:*").await
+        let keys: Vec<String> = conn
+            .keys("nethra:heartbeat:*")
+            .await
             .map_err(|e| format!("KEYS error: {}", e))?;
 
         let agents: Vec<String> = keys

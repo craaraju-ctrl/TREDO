@@ -1,5 +1,5 @@
-use tredo_core::Candle;
 use serde::{Deserialize, Serialize};
+use tredo_core::Candle;
 
 /// Market regime classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,21 +26,36 @@ impl MarketRegime {
     pub fn recommended_strategies(&self) -> Vec<&'static str> {
         match self {
             MarketRegime::TrendingBullish => vec![
-                "macd", "ema_12", "sma_20", "volume_analysis", "bollinger",
+                "macd",
+                "ema_12",
+                "sma_20",
+                "volume_analysis",
+                "bollinger",
                 "support_resistance",
             ],
             MarketRegime::TrendingBearish => vec![
-                "macd", "ema_26", "sma_50", "volume_analysis", "support_resistance",
+                "macd",
+                "ema_26",
+                "sma_50",
+                "volume_analysis",
+                "support_resistance",
             ],
-            MarketRegime::Ranging => vec![
-                "rsi", "bollinger", "support_resistance", "volume_analysis",
-            ],
+            MarketRegime::Ranging => {
+                vec!["rsi", "bollinger", "support_resistance", "volume_analysis"]
+            }
             MarketRegime::HighVolatility => vec![
-                "volatility_analysis", "value_at_risk", "position_sizing",
-                "bollinger", "exposure_limit",
+                "volatility_analysis",
+                "value_at_risk",
+                "position_sizing",
+                "bollinger",
+                "exposure_limit",
             ],
             MarketRegime::LowVolatility => vec![
-                "rsi", "sma_20", "sma_50", "volume_analysis", "support_resistance",
+                "rsi",
+                "sma_20",
+                "sma_50",
+                "volume_analysis",
+                "support_resistance",
             ],
         }
     }
@@ -76,13 +91,18 @@ impl RegimeDetector {
         let lows: Vec<f64> = candles.iter().map(|c| c.low).collect();
 
         // Calculate returns
-        let returns: Vec<f64> = closes.windows(2)
+        let returns: Vec<f64> = closes
+            .windows(2)
             .map(|w| (w[1] - w[0]) / w[0].max(0.0001))
             .collect();
 
         // Volatility (standard deviation of returns)
         let mean_return = returns.iter().sum::<f64>() / returns.len().max(1) as f64;
-        let variance = returns.iter().map(|r| (r - mean_return).powi(2)).sum::<f64>() / returns.len().max(1) as f64;
+        let variance = returns
+            .iter()
+            .map(|r| (r - mean_return).powi(2))
+            .sum::<f64>()
+            / returns.len().max(1) as f64;
         let volatility = variance.sqrt();
 
         // Trend strength using linear regression slope
@@ -98,18 +118,22 @@ impl RegimeDetector {
             denominator += (x - x_mean).powi(2);
         }
 
-        let slope = if denominator > 0.0 { numerator / denominator } else { 0.0 };
+        let slope = if denominator > 0.0 {
+            numerator / denominator
+        } else {
+            0.0
+        };
         let slope_pct = slope / y_mean.max(0.0001);
 
         // ADX-like: measure of trend strength
         let mut true_ranges: Vec<f64> = Vec::new();
         for i in 0..candles.len() {
-            if i == 0 { continue; }
-            let tr = (highs[i] - lows[i]).max(
-                (highs[i] - closes[i-1]).abs()
-            ).max(
-                (lows[i] - closes[i-1]).abs()
-            );
+            if i == 0 {
+                continue;
+            }
+            let tr = (highs[i] - lows[i])
+                .max((highs[i] - closes[i - 1]).abs())
+                .max((lows[i] - closes[i - 1]).abs());
             true_ranges.push(tr);
         }
         let avg_tr = true_ranges.iter().sum::<f64>() / true_ranges.len().max(1) as f64;

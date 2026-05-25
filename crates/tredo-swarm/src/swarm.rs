@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use serde::Serialize;
+use std::sync::Arc;
 
 use tredo_core::{AgentProvider, LLMProvider, MarketAnalysisContext, SignalDirection};
 
@@ -35,20 +35,50 @@ impl BotSwarm {
     ) -> Self {
         let bots = vec![
             // Technical Analyst — heavily weighted, 30+ skills (uses local Ollama model)
-            SwarmBot::new("tech_01", "Technician Alpha", BotRole::TechnicalAnalyst, agent.clone(), local_llm.clone())
-                .with_weight(0.30),
+            SwarmBot::new(
+                "tech_01",
+                "Technician Alpha",
+                BotRole::TechnicalAnalyst,
+                agent.clone(),
+                local_llm.clone(),
+            )
+            .with_weight(0.30),
             // Risk Assessor — safety-critical (uses cloud Gemini model for deep reasoning)
-            SwarmBot::new("risk_01", "Risk Sentinel", BotRole::RiskAssessor, agent.clone(), cloud_llm.clone())
-                .with_weight(0.25),
+            SwarmBot::new(
+                "risk_01",
+                "Risk Sentinel",
+                BotRole::RiskAssessor,
+                agent.clone(),
+                cloud_llm.clone(),
+            )
+            .with_weight(0.25),
             // Portfolio Manager — allocation oversight (uses local Ollama model)
-            SwarmBot::new("port_01", "Portfolio Steward", BotRole::PortfolioManager, agent.clone(), local_llm.clone())
-                .with_weight(0.20),
+            SwarmBot::new(
+                "port_01",
+                "Portfolio Steward",
+                BotRole::PortfolioManager,
+                agent.clone(),
+                local_llm.clone(),
+            )
+            .with_weight(0.20),
             // Market Intelligence — volume and momentum (uses local Ollama model)
-            SwarmBot::new("mkt_01", "Market Scout", BotRole::MarketIntel, agent.clone(), local_llm.clone())
-                .with_weight(0.15),
+            SwarmBot::new(
+                "mkt_01",
+                "Market Scout",
+                BotRole::MarketIntel,
+                agent.clone(),
+                local_llm.clone(),
+            )
+            .with_weight(0.15),
             // Sentiment Analyst — market psychology (uses local Ollama model)
-            SwarmBot::new("sent_01", "Sentiment Oracle", BotRole::SentimentAnalyst, agent.clone(), local_llm.clone())
-                .with_weight(0.10),
+            SwarmBot::new(
+                "sent_01",
+                "Sentiment Oracle",
+                BotRole::SentimentAnalyst,
+                agent.clone(),
+                local_llm.clone(),
+            )
+            .with_weight(0.10),
         ];
 
         Self { bots }
@@ -96,7 +126,9 @@ impl BotSwarm {
         let mut total_neutral = 0u32;
 
         for result in &results {
-            let weight = self.bots.iter()
+            let weight = self
+                .bots
+                .iter()
                 .find(|b| b.id == result.bot_id)
                 .map(|b| b.weight)
                 .unwrap_or(0.25);

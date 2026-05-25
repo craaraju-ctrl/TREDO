@@ -1,14 +1,14 @@
 use crate::config::AutoTradingConfig;
 use crate::regime::{MarketRegime, RegimeDetector};
-use tredo_data::{MarketDataProvider, TimeFrame, YahooFinanceProvider};
-use tredo_journal::{DecisionRecord, PerformanceStats, TradeJournal, TradeRecord};
-use tredo_learning::LearningEngine;
-use tredo_core::{AgentProvider, AggregatedAnalysis, MarketAnalysisContext, SignalDirection};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tredo_core::{AgentProvider, AggregatedAnalysis, MarketAnalysisContext, SignalDirection};
+use tredo_data::{MarketDataProvider, TimeFrame, YahooFinanceProvider};
+use tredo_journal::{DecisionRecord, PerformanceStats, TradeJournal, TradeRecord};
+use tredo_learning::LearningEngine;
 use uuid::Uuid;
 
 /// Action recommended by the trading loop
@@ -167,13 +167,20 @@ impl AutoTradingLoop {
             let mut engine = self.learning_engine.lock().await;
             for (i, name) in skill_names.iter().enumerate() {
                 let skill_id = format!("skill_{}", i);
-                let base_weight = if name.contains("Risk") { 0.8 }
-                    else if name.contains("Portfolio") { 0.6 }
-                    else { 1.0 };
+                let base_weight = if name.contains("Risk") {
+                    0.8
+                } else if name.contains("Portfolio") {
+                    0.6
+                } else {
+                    1.0
+                };
                 engine.register_skill(&skill_id, name, base_weight);
             }
             let count = skill_names.len();
-            println!("[AutoTradingLoop] Registered {} skills with learning engine", count);
+            println!(
+                "[AutoTradingLoop] Registered {} skills with learning engine",
+                count
+            );
         }
 
         loop {
@@ -189,7 +196,8 @@ impl AutoTradingLoop {
                 {
                     let mut guard = self.state.lock().await;
                     guard.last_analysis = Some(now);
-                    guard.next_analysis = Some(now + chrono::Duration::seconds(interval_secs as i64));
+                    guard.next_analysis =
+                        Some(now + chrono::Duration::seconds(interval_secs as i64));
                 }
 
                 // Clone symbols to avoid holding the lock during analysis
@@ -206,8 +214,8 @@ impl AutoTradingLoop {
                     }
                 }
 
-        // Sync learning engine weights back to the agent provider
-        self.sync_learning_to_agent().await;
+                // Sync learning engine weights back to the agent provider
+                self.sync_learning_to_agent().await;
 
                 // Update self-learning stats in state
                 {
@@ -260,7 +268,10 @@ impl AutoTradingLoop {
                 symbol: symbol.to_string(),
                 timestamp: Utc::now(),
                 regime: MarketRegime::Ranging,
-                action: TradeAction::Skip(symbol.to_string(), "No market data available".to_string()),
+                action: TradeAction::Skip(
+                    symbol.to_string(),
+                    "No market data available".to_string(),
+                ),
                 conviction: 0.0,
                 bullish_signals: 0,
                 bearish_signals: 0,
@@ -277,7 +288,14 @@ impl AutoTradingLoop {
         let current_price = all_candles.last().map(|c| c.close).unwrap_or(0.0);
 
         // 4. Read state for balance, config, and learning params
-        let (balance, min_conviction, min_signals, max_risk_pct, _adaptive_enabled, regime_opt_enabled) = {
+        let (
+            balance,
+            min_conviction,
+            min_signals,
+            max_risk_pct,
+            _adaptive_enabled,
+            regime_opt_enabled,
+        ) = {
             let guard = self.state.lock().await;
             (
                 guard.balance,
@@ -310,20 +328,24 @@ impl AutoTradingLoop {
             local_skills: None,
         };
 
-        let analysis = self.agent.analyze_market(&context).await.unwrap_or_else(|e| {
-            println!("[AutoTradingLoop] Agent analysis error: {:?}", e);
-            AggregatedAnalysis {
-                symbol: symbol.to_string(),
-                current_price,
-                signals: vec![],
-                overall_conviction: 0.0,
-                overall_direction: SignalDirection::Neutral,
-                bullish_signals: 0,
-                bearish_signals: 0,
-                neutral_signals: 0,
-                timestamp: chrono::Utc::now(),
-            }
-        });
+        let analysis = self
+            .agent
+            .analyze_market(&context)
+            .await
+            .unwrap_or_else(|e| {
+                println!("[AutoTradingLoop] Agent analysis error: {:?}", e);
+                AggregatedAnalysis {
+                    symbol: symbol.to_string(),
+                    current_price,
+                    signals: vec![],
+                    overall_conviction: 0.0,
+                    overall_direction: SignalDirection::Neutral,
+                    bullish_signals: 0,
+                    bearish_signals: 0,
+                    neutral_signals: 0,
+                    timestamp: chrono::Utc::now(),
+                }
+            });
 
         // 7. Decide action (using learning-adjusted conviction)
         let action = self.decide_action(
@@ -368,7 +390,10 @@ impl AutoTradingLoop {
         let _ = journal.record_decision(&decision);
 
         // 9. Record signals with learning engine if this is a trade action
-        let learning_trade_id = if matches!(action, TradeAction::Buy(_, _, _) | TradeAction::Sell(_, _, _)) {
+        let learning_trade_id = if matches!(
+            action,
+            TradeAction::Buy(_, _, _) | TradeAction::Sell(_, _, _)
+        ) {
             let trade_id = Uuid::new_v4().to_string();
             let mut engine = self.learning_engine.lock().await;
             engine.open_trade(
@@ -456,7 +481,11 @@ impl AutoTradingLoop {
         if analysis.signals.len() < min_signals as usize {
             return TradeAction::Skip(
                 symbol.to_string(),
-                format!("Only {} signals (need {})", analysis.signals.len(), min_signals),
+                format!(
+                    "Only {} signals (need {})",
+                    analysis.signals.len(),
+                    min_signals
+                ),
             );
         }
 
@@ -483,7 +512,10 @@ impl AutoTradingLoop {
             };
 
             if quantity <= 0.0 {
-                return TradeAction::Skip(symbol.to_string(), "Zero quantity calculated".to_string());
+                return TradeAction::Skip(
+                    symbol.to_string(),
+                    "Zero quantity calculated".to_string(),
+                );
             }
 
             TradeAction::Buy(symbol.to_string(), current_price, quantity)
@@ -501,7 +533,10 @@ impl AutoTradingLoop {
                 let mut guard = self.state.lock().await;
 
                 if guard.open_positions.len() >= guard.max_positions {
-                    println!("[AutoTradingLoop] Max positions reached. Skipping buy for {}", symbol);
+                    println!(
+                        "[AutoTradingLoop] Max positions reached. Skipping buy for {}",
+                        symbol
+                    );
                     return;
                 }
 
@@ -631,27 +666,43 @@ impl AutoTradingLoop {
 
         for perf in engine.all_skill_performance() {
             let skill_name_lower = perf.skill_name.to_lowercase();
-            if skill_name_lower.contains("technical analysis") || skill_name_lower.contains("advanced")
-                || skill_name_lower.contains("rsi") || skill_name_lower.contains("macd")
-                || skill_name_lower.contains("bollinger") || skill_name_lower.contains("sma")
-                || skill_name_lower.contains("ema") || skill_name_lower.contains("volume")
-                || skill_name_lower.contains("support") || skill_name_lower.contains("ichimoku")
-                || skill_name_lower.contains("adx") || skill_name_lower.contains("trend")
-                || skill_name_lower.contains("parabolic") || skill_name_lower.contains("keltner")
-                || skill_name_lower.contains("aroon") || skill_name_lower.contains("pivot")
-                || skill_name_lower.contains("chandelier") || skill_name_lower.contains("williams")
-                || skill_name_lower.contains("obv") || skill_name_lower.contains("chaikin")
-                || skill_name_lower.contains("stochastic") || skill_name_lower.contains("donchian")
-                || skill_name_lower.contains("heikin") || skill_name_lower.contains("market struct")
+            if skill_name_lower.contains("technical analysis")
+                || skill_name_lower.contains("advanced")
+                || skill_name_lower.contains("rsi")
+                || skill_name_lower.contains("macd")
+                || skill_name_lower.contains("bollinger")
+                || skill_name_lower.contains("sma")
+                || skill_name_lower.contains("ema")
+                || skill_name_lower.contains("volume")
+                || skill_name_lower.contains("support")
+                || skill_name_lower.contains("ichimoku")
+                || skill_name_lower.contains("adx")
+                || skill_name_lower.contains("trend")
+                || skill_name_lower.contains("parabolic")
+                || skill_name_lower.contains("keltner")
+                || skill_name_lower.contains("aroon")
+                || skill_name_lower.contains("pivot")
+                || skill_name_lower.contains("chandelier")
+                || skill_name_lower.contains("williams")
+                || skill_name_lower.contains("obv")
+                || skill_name_lower.contains("chaikin")
+                || skill_name_lower.contains("stochastic")
+                || skill_name_lower.contains("donchian")
+                || skill_name_lower.contains("heikin")
+                || skill_name_lower.contains("market struct")
                 || skill_name_lower.contains("cypher")
             {
                 technical_weights.push(perf.adjusted_weight);
-            } else if skill_name_lower.contains("portfolio") || skill_name_lower.contains("diversification")
-                || skill_name_lower.contains("correlation") || skill_name_lower.contains("health")
+            } else if skill_name_lower.contains("portfolio")
+                || skill_name_lower.contains("diversification")
+                || skill_name_lower.contains("correlation")
+                || skill_name_lower.contains("health")
             {
                 portfolio_weights.push(perf.adjusted_weight);
-            } else if skill_name_lower.contains("risk") || skill_name_lower.contains("position sizing")
-                || skill_name_lower.contains("value at risk") || skill_name_lower.contains("exposure")
+            } else if skill_name_lower.contains("risk")
+                || skill_name_lower.contains("position sizing")
+                || skill_name_lower.contains("value at risk")
+                || skill_name_lower.contains("exposure")
                 || skill_name_lower.contains("volatility")
             {
                 risk_weights.push(perf.adjusted_weight);
@@ -662,8 +713,11 @@ impl AutoTradingLoop {
 
         // Compute average weight for each sub-agent, normalized against base
         let avg = |weights: &[f64]| -> f64 {
-            if weights.is_empty() { 0.25 }
-            else { weights.iter().sum::<f64>() / weights.len() as f64 }
+            if weights.is_empty() {
+                0.25
+            } else {
+                weights.iter().sum::<f64>() / weights.len() as f64
+            }
         };
 
         let scale = |raw: f64| -> f64 { (raw * 0.3 + 0.2).clamp(0.05, 0.80) };
@@ -675,10 +729,18 @@ impl AutoTradingLoop {
 
         let sum = tech_weight + risk_weight + port_weight + mkt_weight;
         if sum > 0.0 {
-            self.agent.update_weight("technical_analyst", tech_weight / sum).await;
-            self.agent.update_weight("risk_manager", risk_weight / sum).await;
-            self.agent.update_weight("portfolio_manager", port_weight / sum).await;
-            self.agent.update_weight("market_data_agent", mkt_weight / sum).await;
+            self.agent
+                .update_weight("technical_analyst", tech_weight / sum)
+                .await;
+            self.agent
+                .update_weight("risk_manager", risk_weight / sum)
+                .await;
+            self.agent
+                .update_weight("portfolio_manager", port_weight / sum)
+                .await;
+            self.agent
+                .update_weight("market_data_agent", mkt_weight / sum)
+                .await;
         }
     }
 }

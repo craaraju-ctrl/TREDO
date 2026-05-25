@@ -1,9 +1,8 @@
-use std::sync::Arc;
 use serde::Serialize;
+use std::sync::Arc;
 
 use tredo_core::{
-    AgentProvider, LLMProvider, MarketAnalysisContext, AggregatedAnalysis,
-    SignalDirection,
+    AgentProvider, AggregatedAnalysis, LLMProvider, MarketAnalysisContext, SignalDirection,
 };
 
 // ── Bot Role ──────────────────────────────────────────────────────────────
@@ -135,20 +134,23 @@ impl SwarmBot {
 
     /// Run market analysis using the agent provider.
     pub async fn analyze(&self, context: &MarketAnalysisContext) -> AggregatedAnalysis {
-        self.agent.analyze_market(context).await.unwrap_or_else(|e| {
-            eprintln!("[SwarmBot:{}] Agent analysis error: {:?}", self.id, e);
-            AggregatedAnalysis {
-                symbol: context.symbol.clone(),
-                current_price: context.current_price,
-                signals: vec![],
-                overall_conviction: 0.0,
-                overall_direction: SignalDirection::Neutral,
-                bullish_signals: 0,
-                bearish_signals: 0,
-                neutral_signals: 0,
-                timestamp: chrono::Utc::now(),
-            }
-        })
+        self.agent
+            .analyze_market(context)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("[SwarmBot:{}] Agent analysis error: {:?}", self.id, e);
+                AggregatedAnalysis {
+                    symbol: context.symbol.clone(),
+                    current_price: context.current_price,
+                    signals: vec![],
+                    overall_conviction: 0.0,
+                    overall_direction: SignalDirection::Neutral,
+                    bullish_signals: 0,
+                    bearish_signals: 0,
+                    neutral_signals: 0,
+                    timestamp: chrono::Utc::now(),
+                }
+            })
     }
 
     /// Use the LLM to reason about an analysis and produce a summary.
@@ -173,7 +175,11 @@ impl SwarmBot {
             analysis.neutral_signals,
         );
 
-        match self.llm.complete(&prompt, Some(&self.system_prompt), None).await {
+        match self
+            .llm
+            .complete(&prompt, Some(&self.system_prompt), None)
+            .await
+        {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("[SwarmBot:{}] LLM reasoning error: {:?}", self.id, e);

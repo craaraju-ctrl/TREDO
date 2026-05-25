@@ -1,4 +1,7 @@
-use crate::{Candle, MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal, TradingSkill};
+use crate::{
+    Candle, MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal,
+    TradingSkill,
+};
 use std::collections::HashMap;
 
 // ── Helper Functions ──────────────────────────────────────────────────────
@@ -80,16 +83,26 @@ impl Default for RsiSkill {
 
 #[async_trait::async_trait]
 impl TradingSkill for RsiSkill {
-    fn id(&self) -> &'static str { "rsi" }
-    fn name(&self) -> &'static str { "RSI (Relative Strength Index)" }
-    fn description(&self) -> &'static str { "Measures magnitude of recent price changes to evaluate overbought/oversold conditions" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "rsi"
+    }
+    fn name(&self) -> &'static str {
+        "RSI (Relative Strength Index)"
+    }
+    fn description(&self) -> &'static str {
+        "Measures magnitude of recent price changes to evaluate overbought/oversold conditions"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period + 1 {
             return Err(SkillError::InsufficientData(format!(
-                "Need at least {} candles for RSI, got {}", self.period + 1, closes.len()
+                "Need at least {} candles for RSI, got {}",
+                self.period + 1,
+                closes.len()
             )));
         }
 
@@ -110,8 +123,10 @@ impl TradingSkill for RsiSkill {
         let mut current_avg_loss = avg_loss;
 
         for i in self.period..gains.len() {
-            current_avg_gain = (current_avg_gain * (self.period as f64 - 1.0) + gains[i]) / self.period as f64;
-            current_avg_loss = (current_avg_loss * (self.period as f64 - 1.0) + losses[i]) / self.period as f64;
+            current_avg_gain =
+                (current_avg_gain * (self.period as f64 - 1.0) + gains[i]) / self.period as f64;
+            current_avg_loss =
+                (current_avg_loss * (self.period as f64 - 1.0) + losses[i]) / self.period as f64;
         }
 
         let rsi = if current_avg_loss == 0.0 {
@@ -148,11 +163,17 @@ impl TradingSkill for RsiSkill {
             confidence: 0.75,
             details: format!(
                 "RSI({}) = {:.1}. {} conditions detected (threshold: {} overbought / {} oversold).",
-                self.period, rsi,
-                if rsi > self.overbought_threshold { "Overbought" }
-                else if rsi < self.oversold_threshold { "Oversold" }
-                else { "Neutral range" },
-                self.overbought_threshold, self.oversold_threshold
+                self.period,
+                rsi,
+                if rsi > self.overbought_threshold {
+                    "Overbought"
+                } else if rsi < self.oversold_threshold {
+                    "Oversold"
+                } else {
+                    "Neutral range"
+                },
+                self.overbought_threshold,
+                self.oversold_threshold
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -170,23 +191,37 @@ pub struct MacdSkill {
 
 impl Default for MacdSkill {
     fn default() -> Self {
-        Self { fast_period: 12, slow_period: 26, signal_period: 9 }
+        Self {
+            fast_period: 12,
+            slow_period: 26,
+            signal_period: 9,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for MacdSkill {
-    fn id(&self) -> &'static str { "macd" }
-    fn name(&self) -> &'static str { "MACD (Moving Average Convergence Divergence)" }
-    fn description(&self) -> &'static str { "Trend-following momentum indicator showing relationship between two moving averages" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "macd"
+    }
+    fn name(&self) -> &'static str {
+        "MACD (Moving Average Convergence Divergence)"
+    }
+    fn description(&self) -> &'static str {
+        "Trend-following momentum indicator showing relationship between two moving averages"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         let min_candles = self.slow_period + self.signal_period;
         if closes.len() < min_candles {
             return Err(SkillError::InsufficientData(format!(
-                "Need at least {} candles for MACD, got {}", min_candles, closes.len()
+                "Need at least {} candles for MACD, got {}",
+                min_candles,
+                closes.len()
             )));
         }
 
@@ -207,17 +242,32 @@ impl TradingSkill for MacdSkill {
 
         // Get the latest values
         let last_macd = *macd_line.iter().rev().find(|v| !v.is_nan()).unwrap_or(&0.0);
-        let prev_macd = macd_line.iter().rev().skip(1).find(|v| !v.is_nan()).unwrap_or(&0.0);
-        let last_signal = signal_line.iter().rev().find(|v| !v.is_nan()).unwrap_or(&0.0);
+        let prev_macd = macd_line
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|v| !v.is_nan())
+            .unwrap_or(&0.0);
+        let last_signal = signal_line
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .unwrap_or(&0.0);
         let histogram = last_macd - last_signal;
 
         // Detect crossovers
-        let prev_hist = prev_macd - signal_line.iter().rev().skip(1).find(|v| !v.is_nan()).unwrap_or(&0.0);
+        let prev_hist = prev_macd
+            - signal_line
+                .iter()
+                .rev()
+                .skip(1)
+                .find(|v| !v.is_nan())
+                .unwrap_or(&0.0);
 
         let direction = if histogram > 0.0 && prev_hist <= 0.0 {
-            SignalDirection::Bullish  // Bullish crossover
+            SignalDirection::Bullish // Bullish crossover
         } else if histogram < 0.0 && prev_hist >= 0.0 {
-            SignalDirection::Bearish  // Bearish crossover
+            SignalDirection::Bearish // Bearish crossover
         } else if histogram > 0.0 {
             SignalDirection::Bullish
         } else {
@@ -239,9 +289,17 @@ impl TradingSkill for MacdSkill {
             confidence: 0.7,
             details: format!(
                 "MACD({},{},{}) histogram = {:.2}. MACD Line = {:.2}, Signal = {:.2}. {} momentum.",
-                self.fast_period, self.slow_period, self.signal_period,
-                histogram, last_macd, last_signal,
-                if histogram > 0.0 { "Bullish" } else { "Bearish" }
+                self.fast_period,
+                self.slow_period,
+                self.signal_period,
+                histogram,
+                last_macd,
+                last_signal,
+                if histogram > 0.0 {
+                    "Bullish"
+                } else {
+                    "Bearish"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -258,22 +316,35 @@ pub struct BollingerBandsSkill {
 
 impl Default for BollingerBandsSkill {
     fn default() -> Self {
-        Self { period: 20, std_dev: 2.0 }
+        Self {
+            period: 20,
+            std_dev: 2.0,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for BollingerBandsSkill {
-    fn id(&self) -> &'static str { "bollinger" }
-    fn name(&self) -> &'static str { "Bollinger Bands" }
-    fn description(&self) -> &'static str { "Volatility bands placed above and below a moving average, indicating overbought/oversold conditions" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "bollinger"
+    }
+    fn name(&self) -> &'static str {
+        "Bollinger Bands"
+    }
+    fn description(&self) -> &'static str {
+        "Volatility bands placed above and below a moving average, indicating overbought/oversold conditions"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period {
             return Err(SkillError::InsufficientData(format!(
-                "Need at least {} candles for Bollinger Bands, got {}", self.period, closes.len()
+                "Need at least {} candles for Bollinger Bands, got {}",
+                self.period,
+                closes.len()
             )));
         }
 
@@ -281,7 +352,12 @@ impl TradingSkill for BollingerBandsSkill {
         let price = context.current_price;
 
         // Get the latest valid SMA
-        let last_sma = middle_band_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(price);
+        let last_sma = middle_band_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(price);
 
         // Calculate standard deviation of the last `period` closes
         let recent_closes: Vec<f64> = closes.iter().rev().take(self.period).copied().collect();
@@ -292,16 +368,16 @@ impl TradingSkill for BollingerBandsSkill {
         let bandwidth = ((upper_band - lower_band) / last_sma) * 100.0;
 
         let direction = if price >= upper_band {
-            SignalDirection::Bearish  // Price touching upper band = overextended
+            SignalDirection::Bearish // Price touching upper band = overextended
         } else if price <= lower_band || price > last_sma {
-            SignalDirection::Bullish  // Price touching lower band = potential bounce, or above SMA
+            SignalDirection::Bullish // Price touching lower band = potential bounce, or above SMA
         } else {
             SignalDirection::Bearish
         };
 
         // Squeeze detection (low bandwidth = potential breakout)
         let strength = if bandwidth < 5.0 {
-            0.8  // Squeeze = high potential
+            0.8 // Squeeze = high potential
         } else if price >= upper_band || price <= lower_band {
             0.75
         } else {
@@ -323,11 +399,21 @@ impl TradingSkill for BollingerBandsSkill {
             confidence: 0.72,
             details: format!(
                 "Bollinger({},{}) — Price ${:.2} is {:.1}% bandwidth (${:.2}–${:.2}). {}.",
-                self.period, self.std_dev, price, bandwidth, lower_band, upper_band,
-                if price >= upper_band { "Touching upper band — potential reversal down" }
-                else if price <= lower_band { "Touching lower band — potential bounce up" }
-                else if bandwidth < 5.0 { "Squeeze detected — volatility breakout imminent" }
-                else { "Trading within normal range" }
+                self.period,
+                self.std_dev,
+                price,
+                bandwidth,
+                lower_band,
+                upper_band,
+                if price >= upper_band {
+                    "Touching upper band — potential reversal down"
+                } else if price <= lower_band {
+                    "Touching lower band — potential bounce up"
+                } else if bandwidth < 5.0 {
+                    "Squeeze detected — volatility breakout imminent"
+                } else {
+                    "Trading within normal range"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -357,21 +443,37 @@ impl SmaSkill {
 
 #[async_trait::async_trait]
 impl TradingSkill for SmaSkill {
-    fn id(&self) -> &str { &self.skill_id }
-    fn name(&self) -> &str { &self.skill_name }
-    fn description(&self) -> &str { &self.skill_desc }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &str {
+        &self.skill_id
+    }
+    fn name(&self) -> &str {
+        &self.skill_name
+    }
+    fn description(&self) -> &str {
+        &self.skill_desc
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period {
             return Err(SkillError::InsufficientData(format!(
-                "Need at least {} candles for SMA({}), got {}", self.period, self.period, closes.len()
+                "Need at least {} candles for SMA({}), got {}",
+                self.period,
+                self.period,
+                closes.len()
             )));
         }
 
         let sma_values = sma(&closes, self.period);
-        let last_sma = sma_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(context.current_price);
+        let last_sma = sma_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(context.current_price);
         let price = context.current_price;
 
         let direction = if price > last_sma * 1.01 {
@@ -396,8 +498,15 @@ impl TradingSkill for SmaSkill {
             confidence: 0.65,
             details: format!(
                 "SMA({}) = ${:.2}. Price ${:.2} is {:.1}% {} the moving average.",
-                self.period, last_sma, price, deviation_pct.abs(),
-                if deviation_pct > 0.0 { "above" } else { "below" }
+                self.period,
+                last_sma,
+                price,
+                deviation_pct.abs(),
+                if deviation_pct > 0.0 {
+                    "above"
+                } else {
+                    "below"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -427,21 +536,37 @@ impl EmaSkill {
 
 #[async_trait::async_trait]
 impl TradingSkill for EmaSkill {
-    fn id(&self) -> &str { &self.skill_id }
-    fn name(&self) -> &str { &self.skill_name }
-    fn description(&self) -> &str { &self.skill_desc }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &str {
+        &self.skill_id
+    }
+    fn name(&self) -> &str {
+        &self.skill_name
+    }
+    fn description(&self) -> &str {
+        &self.skill_desc
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period {
             return Err(SkillError::InsufficientData(format!(
-                "Need at least {} candles for EMA({}), got {}", self.period, self.period, closes.len()
+                "Need at least {} candles for EMA({}), got {}",
+                self.period,
+                self.period,
+                closes.len()
             )));
         }
 
         let ema_values = ema(&closes, self.period);
-        let last_ema = ema_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(context.current_price);
+        let last_ema = ema_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(context.current_price);
         let price = context.current_price;
 
         let direction = if price > last_ema * 1.005 {
@@ -466,8 +591,15 @@ impl TradingSkill for EmaSkill {
             confidence: 0.68,
             details: format!(
                 "EMA({}) = ${:.2}. Price ${:.2} is {:.1}% {} the exponential average.",
-                self.period, last_ema, price, deviation_pct.abs(),
-                if deviation_pct > 0.0 { "above" } else { "below" }
+                self.period,
+                last_ema,
+                price,
+                deviation_pct.abs(),
+                if deviation_pct > 0.0 {
+                    "above"
+                } else {
+                    "below"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -484,23 +616,36 @@ pub struct SupportResistanceSkill {
 
 impl Default for SupportResistanceSkill {
     fn default() -> Self {
-        Self { lookback: 40, sensitivity: 0.02 }
+        Self {
+            lookback: 40,
+            sensitivity: 0.02,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for SupportResistanceSkill {
-    fn id(&self) -> &'static str { "support_resistance" }
-    fn name(&self) -> &'static str { "Support & Resistance Levels" }
-    fn description(&self) -> &'static str { "Identifies key price levels where buying or selling pressure is expected" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "support_resistance"
+    }
+    fn name(&self) -> &'static str {
+        "Support & Resistance Levels"
+    }
+    fn description(&self) -> &'static str {
+        "Identifies key price levels where buying or selling pressure is expected"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
 
         if highs.len() < 10 {
-            return Err(SkillError::InsufficientData("Not enough data for S/R analysis".to_string()));
+            return Err(SkillError::InsufficientData(
+                "Not enough data for S/R analysis".to_string(),
+            ));
         }
 
         let price = context.current_price;
@@ -533,7 +678,8 @@ impl TradingSkill for SupportResistanceSkill {
             while i < levels.len() {
                 let mut sum = levels[i];
                 let mut count = 1;
-                while i + 1 < levels.len() && (levels[i + 1] - levels[i]).abs() < cluster_threshold {
+                while i + 1 < levels.len() && (levels[i + 1] - levels[i]).abs() < cluster_threshold
+                {
                     i += 1;
                     sum += levels[i];
                     count += 1;
@@ -551,37 +697,49 @@ impl TradingSkill for SupportResistanceSkill {
         let support_levels = cluster(&mut sup_clustered);
 
         // Find nearest levels
-        let nearest_resistance = resistance_levels.iter()
+        let nearest_resistance = resistance_levels
+            .iter()
             .filter(|&&r| r > price)
             .min_by(|a, b| a.partial_cmp(b).expect("Price levels should not be NaN"))
             .copied();
 
-        let nearest_support = support_levels.iter()
+        let nearest_support = support_levels
+            .iter()
             .filter(|&&s| s < price)
             .max_by(|a, b| a.partial_cmp(b).expect("Price levels should not be NaN"))
             .copied();
 
         // Calculate distance to nearest levels
-        let resistance_dist = nearest_resistance.map(|r| ((r - price) / price) * 100.0).unwrap_or(5.0);
-        let support_dist = nearest_support.map(|s| ((price - s) / price) * 100.0).unwrap_or(5.0);
+        let resistance_dist = nearest_resistance
+            .map(|r| ((r - price) / price) * 100.0)
+            .unwrap_or(5.0);
+        let support_dist = nearest_support
+            .map(|s| ((price - s) / price) * 100.0)
+            .unwrap_or(5.0);
 
         // Determine direction based on proximity to levels
         let direction = if resistance_dist < 1.0 {
-            SignalDirection::Bearish  // Near resistance = potential rejection
+            SignalDirection::Bearish // Near resistance = potential rejection
         } else if support_dist < 1.0 {
-            SignalDirection::Bullish  // Near support = potential bounce
+            SignalDirection::Bullish // Near support = potential bounce
         } else if resistance_dist < support_dist {
-            SignalDirection::Bearish  // Closer to resistance
+            SignalDirection::Bearish // Closer to resistance
         } else {
-            SignalDirection::Bullish  // Closer to support
+            SignalDirection::Bullish // Closer to support
         };
 
         let min_dist = resistance_dist.min(support_dist);
         let strength = (1.0 - (min_dist / 10.0).min(1.0)).max(0.3);
 
         let mut indicators = HashMap::new();
-        indicators.insert("nearest_resistance".to_string(), nearest_resistance.unwrap_or(0.0));
-        indicators.insert("nearest_support".to_string(), nearest_support.unwrap_or(0.0));
+        indicators.insert(
+            "nearest_resistance".to_string(),
+            nearest_resistance.unwrap_or(0.0),
+        );
+        indicators.insert(
+            "nearest_support".to_string(),
+            nearest_support.unwrap_or(0.0),
+        );
         indicators.insert("resistance_distance_pct".to_string(), resistance_dist);
         indicators.insert("support_distance_pct".to_string(), support_dist);
 
@@ -611,15 +769,25 @@ pub struct VolumeAnalysisSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for VolumeAnalysisSkill {
-    fn id(&self) -> &'static str { "volume_analysis" }
-    fn name(&self) -> &'static str { "Volume Analysis" }
-    fn description(&self) -> &'static str { "Analyzes trading volume to confirm price trends and detect anomalies" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "volume_analysis"
+    }
+    fn name(&self) -> &'static str {
+        "Volume Analysis"
+    }
+    fn description(&self) -> &'static str {
+        "Analyzes trading volume to confirm price trends and detect anomalies"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let volumes: Vec<f64> = context.candles.iter().map(|c| c.volume).collect();
         if volumes.len() < 10 {
-            return Err(SkillError::InsufficientData("Not enough volume data".to_string()));
+            return Err(SkillError::InsufficientData(
+                "Not enough volume data".to_string(),
+            ));
         }
 
         let recent = &volumes[volumes.len().saturating_sub(5)..];
@@ -664,10 +832,15 @@ impl TradingSkill for VolumeAnalysisSkill {
             confidence: 0.6,
             details: format!(
                 "Volume Ratio (recent vs avg): {:.2}x. Price trend: {:.2}%. {}.",
-                volume_ratio, price_trend * 100.0,
-                if volume_ratio > 1.2 { "Above-average volume confirming movement" }
-                else if volume_ratio < 0.8 { "Below-average volume — low conviction" }
-                else { "Normal volume levels" }
+                volume_ratio,
+                price_trend * 100.0,
+                if volume_ratio > 1.2 {
+                    "Above-average volume confirming movement"
+                } else if volume_ratio < 0.8 {
+                    "Below-average volume — low conviction"
+                } else {
+                    "Normal volume levels"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),

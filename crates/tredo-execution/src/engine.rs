@@ -1,12 +1,8 @@
-use tokio::sync::mpsc;
 use dashmap::DashMap;
 use std::sync::Arc;
+use tokio::sync::mpsc;
+use tredo_types::{ExecutionCommand, MarketData, RiskEngine, TantraCommand, TradeDecision};
 use uuid::Uuid;
-use tredo_types::{
-    ExecutionCommand, TantraCommand,
-    TradeDecision, MarketData,
-    RiskEngine,
-};
 
 // ── Shared Lock-Free State Cache ──────────────────────────────────────────
 
@@ -41,7 +37,12 @@ impl ExecutionEngine {
         risk_engine: RiskEngine,
         tantra_tx: mpsc::Sender<TantraCommand>,
     ) -> Self {
-        Self { rx, cache, risk_engine, tantra_tx }
+        Self {
+            rx,
+            cache,
+            risk_engine,
+            tantra_tx,
+        }
     }
 
     pub async fn run(mut self) {
@@ -75,7 +76,10 @@ impl ExecutionEngine {
 
         // Risk gate
         if !self.risk_engine.verify_sync(&decision, &market_data) {
-            let _ = self.tantra_tx.send(TantraCommand::RiskRejected(decision)).await;
+            let _ = self
+                .tantra_tx
+                .send(TantraCommand::RiskRejected(decision))
+                .await;
             return;
         }
 
@@ -83,9 +87,19 @@ impl ExecutionEngine {
         let cost = decision.amount * decision.price;
         let asset = "USDT".to_string();
 
-        self.cache.balances.entry(asset.clone()).and_modify(|b| *b -= cost).or_insert(0.0);
-        self.cache.pending_deductions.entry(asset.clone()).and_modify(|p| *p += cost).or_insert(cost);
-        self.cache.in_flight_orders.insert(decision.id, decision.clone());
+        self.cache
+            .balances
+            .entry(asset.clone())
+            .and_modify(|b| *b -= cost)
+            .or_insert(0.0);
+        self.cache
+            .pending_deductions
+            .entry(asset.clone())
+            .and_modify(|p| *p += cost)
+            .or_insert(cost);
+        self.cache
+            .in_flight_orders
+            .insert(decision.id, decision.clone());
 
         // Dispatch to exchange in a non-blocking task
         let tantra_tx = self.tantra_tx.clone();
@@ -96,7 +110,11 @@ impl ExecutionEngine {
             let symbol = decision.symbol.clone();
             let action = decision.action.clone();
             let amount = decision.amount;
-            let price = if decision.price > 0.0 { Some(decision.price) } else { None };
+            let price = if decision.price > 0.0 {
+                Some(decision.price)
+            } else {
+                None
+            };
 
             let result = if symbol.contains('-') {
                 tredo_exchange::kucoin::execute_order(&symbol, &action, amount, price).await
@@ -111,10 +129,16 @@ impl ExecutionEngine {
                     let _ = tantra_tx.send(TantraCommand::TradeExecuted(decision)).await;
                 }
                 Err(e) => {
-                    eprintln!("[ExecutionEngine] Private signed order dispatch failed: {}", e);
+                    eprintln!(
+                        "[ExecutionEngine] Private signed order dispatch failed: {}",
+                        e
+                    );
                     // Refund on failure
                     cache.in_flight_orders.remove(&order_id);
-                    cache.balances.entry(asset.clone()).and_modify(|b| *b += cost);
+                    cache
+                        .balances
+                        .entry(asset.clone())
+                        .and_modify(|b| *b += cost);
                     cache.pending_deductions.remove(&asset);
                     let _ = tantra_tx.send(TantraCommand::RiskRejected(decision)).await;
                 }
@@ -127,14 +151,21 @@ impl ExecutionEngine {
             symbol: decision.symbol.clone(),
             price: decision.price,
             cash_available: self.cache.balances.get("USDT").map(|v| *v).unwrap_or(0.0),
-            exposure: self.cache.exposures.get(&decision.symbol).map(|v| *v).unwrap_or(0.0),
+            exposure: self
+                .cache
+                .exposures
+                .get(&decision.symbol)
+                .map(|v| *v)
+                .unwrap_or(0.0),
         }
     }
 
     fn refund_in_flight(&self, order_id: Uuid, asset: String, amount: f64) {
         self.cache.in_flight_orders.remove(&order_id);
-        self.cache.balances.entry(asset.clone()).and_modify(|b| *b += amount);
+        self.cache
+            .balances
+            .entry(asset.clone())
+            .and_modify(|b| *b += amount);
         self.cache.pending_deductions.remove(&asset);
     }
 }
-

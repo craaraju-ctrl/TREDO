@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection, Result as SqlResult};
 use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -8,16 +8,16 @@ use std::sync::Mutex;
 pub struct TradeRecord {
     pub id: String,
     pub symbol: String,
-    pub side: String,          // "BUY" or "SELL"
+    pub side: String, // "BUY" or "SELL"
     pub entry_price: f64,
     pub exit_price: Option<f64>,
     pub quantity: f64,
-    pub pnl: Option<f64>,       // Realized P&L when closed
-    pub pnl_pct: Option<f64>,   // Percentage P&L
+    pub pnl: Option<f64>,     // Realized P&L when closed
+    pub pnl_pct: Option<f64>, // Percentage P&L
     pub conviction_at_entry: f64,
     pub entry_reasoning: String,
     pub exit_reasoning: Option<String>,
-    pub market_regime: String,  // "trending_bullish", "trending_bearish", "ranging", "volatile"
+    pub market_regime: String, // "trending_bullish", "trending_bearish", "ranging", "volatile"
     pub strategies_used: String, // Comma-separated strategy IDs
     pub open_time: DateTime<Utc>,
     pub close_time: Option<DateTime<Utc>>,
@@ -33,7 +33,7 @@ pub struct DecisionRecord {
     pub overall_conviction: f64,
     pub overall_direction: String,
     pub market_regime: String,
-    pub action_taken: String,   // "BUY", "SELL", "HOLD", "SKIP"
+    pub action_taken: String, // "BUY", "SELL", "HOLD", "SKIP"
     pub reason: String,
     pub bullish_signals: u32,
     pub bearish_signals: u32,
@@ -142,7 +142,12 @@ impl TradeJournal {
     }
 
     /// Close an existing trade with exit data
-    pub fn close_trade(&self, trade_id: &str, exit_price: f64, exit_reasoning: &str) -> SqlResult<Option<TradeRecord>> {
+    pub fn close_trade(
+        &self,
+        trade_id: &str,
+        exit_price: f64,
+        exit_reasoning: &str,
+    ) -> SqlResult<Option<TradeRecord>> {
         let conn = self.conn.lock().expect("Journal Mutex poisoned");
 
         // Get the open trade
@@ -239,7 +244,8 @@ impl TradeJournal {
              FROM trades WHERE is_open = 1 ORDER BY open_time DESC",
         )?;
 
-        let trades = stmt.query_map([], Self::map_trade_row)?
+        let trades = stmt
+            .query_map([], Self::map_trade_row)?
             .filter_map(|r| r.ok())
             .collect();
         Ok(trades)
@@ -253,7 +259,8 @@ impl TradeJournal {
              FROM trades ORDER BY open_time DESC LIMIT ?1 OFFSET ?2",
         )?;
 
-        let trades = stmt.query_map(params![limit, offset], Self::map_trade_row)?
+        let trades = stmt
+            .query_map(params![limit, offset], Self::map_trade_row)?
             .filter_map(|r| r.ok())
             .collect();
         Ok(trades)
@@ -355,7 +362,11 @@ impl TradeJournal {
         )?;
 
         let results = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
         })?;
 
         Ok(results.filter_map(|r| r.ok()).collect())
@@ -371,7 +382,11 @@ impl TradeJournal {
         )?;
 
         let results = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
         })?;
 
         Ok(results.filter_map(|r| r.ok()).collect())
@@ -395,7 +410,8 @@ impl TradeJournal {
             open_time: DateTime::parse_from_rfc3339(&row.get::<_, String>(13)?)
                 .map(|d| d.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
-            close_time: row.get::<_, Option<String>>(14)?
+            close_time: row
+                .get::<_, Option<String>>(14)?
                 .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                 .map(|d| d.with_timezone(&Utc)),
             is_open: row.get::<_, i32>(15)? != 0,
@@ -407,7 +423,8 @@ impl TradeJournal {
             "SELECT pnl FROM trades WHERE is_open = 0 AND pnl IS NOT NULL ORDER BY close_time ASC",
         )?;
 
-        let pnls: Vec<f64> = stmt.query_map([], |row| row.get::<_, f64>(0))?
+        let pnls: Vec<f64> = stmt
+            .query_map([], |row| row.get::<_, f64>(0))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -438,7 +455,8 @@ impl TradeJournal {
             "SELECT pnl FROM trades WHERE is_open = 0 AND pnl IS NOT NULL ORDER BY close_time ASC",
         )?;
 
-        let pnls: Vec<f64> = stmt.query_map([], |row| row.get::<_, f64>(0))?
+        let pnls: Vec<f64> = stmt
+            .query_map([], |row| row.get::<_, f64>(0))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -447,7 +465,8 @@ impl TradeJournal {
         }
 
         let mean = pnls.iter().sum::<f64>() / pnls.len() as f64;
-        let variance = pnls.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (pnls.len() - 1) as f64;
+        let variance =
+            pnls.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (pnls.len() - 1) as f64;
         let std_dev = variance.sqrt();
 
         if std_dev == 0.0 {

@@ -50,7 +50,7 @@ impl Default for AutoTradingConfig {
             ],
             enabled: false,
             paper_trading: true,
-            analysis_interval_secs: 300,  // 5 minutes
+            analysis_interval_secs: 300, // 5 minutes
             min_conviction: 0.55,
             min_signals_required: 3,
             max_positions: 5,

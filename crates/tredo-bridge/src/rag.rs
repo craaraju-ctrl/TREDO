@@ -33,15 +33,15 @@ pub struct MemoryEntry {
     pub agent_id: String,
     pub key: String,
     pub content: String,
-    pub content_type: String,   // "signal", "decision", "insight", "context"
-    pub source: String,         // "python_nethra", "rust_tredo", "technical_analyst", etc.
-    pub embedding: Vec<f64>,    // Simple embedding vector
-    pub importance: f64,        // 0.0 to 1.0 — how important this memory is
+    pub content_type: String, // "signal", "decision", "insight", "context"
+    pub source: String,       // "python_nethra", "rust_tredo", "technical_analyst", etc.
+    pub embedding: Vec<f64>,  // Simple embedding vector
+    pub importance: f64,      // 0.0 to 1.0 — how important this memory is
     pub access_count: u64,
     pub created_at: DateTime<Utc>,
     pub last_accessed: DateTime<Utc>,
     pub ttl_days: u32,
-    pub tier: u8,               // 1 = Redis, 2 = SQLite, 3 = Postgres
+    pub tier: u8, // 1 = Redis, 2 = SQLite, 3 = Postgres
     pub metadata: serde_json::Value,
 }
 
@@ -49,7 +49,7 @@ pub struct MemoryEntry {
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResult {
     pub entry: MemoryEntry,
-    pub score: f64,          // 0.0 to 1.0 similarity
+    pub score: f64, // 0.0 to 1.0 similarity
     pub source_tier: u8,
 }
 
@@ -75,10 +75,10 @@ impl Default for RAGConfig {
         Self {
             l1_max_entries: 500,
             l2_max_entries: 10_000,
-            l1_ttl_secs: 3600,         // 1 hour in Redis
+            l1_ttl_secs: 3600, // 1 hour in Redis
             promote_threshold: 0.6,
             max_embeddings_per_agent: 100,
-            prune_interval_secs: 300,   // 5 minutes
+            prune_interval_secs: 300, // 5 minutes
         }
     }
 }
@@ -122,7 +122,9 @@ impl MemoryEntry {
 
         for window in chars.windows(2) {
             let bigram = format!("{}{}", window[0], window[1]);
-            let hash = bigram.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+            let hash = bigram
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
             let idx = (hash as usize) % 64;
             vec[idx] += 1.0;
         }
@@ -213,21 +215,21 @@ impl HierarchicalRAG {
 
     /// Store a memory entry across all tiers
     pub async fn store(&self, entry: MemoryEntry) -> Result<(), String> {
-        let json = serde_json::to_string(&entry)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+        let json = serde_json::to_string(&entry).map_err(|e| format!("Serialize error: {}", e))?;
 
         // L1: Store in shared state hash (accessible via get_all_state for search)
         if entry.importance >= self.config.promote_threshold {
-            self.bridge.set_state(
-                &format!("rag:l1:{}", entry.id),
-                &json,
-            ).await?;
+            self.bridge
+                .set_state(&format!("rag:l1:{}", entry.id), &json)
+                .await?;
             // Also set TTL via cache_set so it auto-expires
-            self.bridge.cache_set(
-                &format!("rag:l1:{}", entry.id),
-                &json,
-                self.config.l1_ttl_secs,
-            ).await?;
+            self.bridge
+                .cache_set(
+                    &format!("rag:l1:{}", entry.id),
+                    &json,
+                    self.config.l1_ttl_secs,
+                )
+                .await?;
         }
 
         // L2: Store in SQLite
@@ -250,28 +252,36 @@ impl HierarchicalRAG {
         }
 
         // Publish memory update to Redis (for Python Nethra to consume)
-        self.bridge.publish(
-            "nethra:memory",
-            &crate::redis_bridge::AgentBusMessage::broadcast(
-                "rust_tredo_rag",
-                "memory_store",
-                serde_json::json!({
-                    "entry_id": entry.id,
-                    "agent_id": entry.agent_id,
-                    "key": entry.key,
-                    "content_type": entry.content_type,
-                    "importance": entry.importance,
-                }),
-            ),
-        ).await?;
+        self.bridge
+            .publish(
+                "nethra:memory",
+                &crate::redis_bridge::AgentBusMessage::broadcast(
+                    "rust_tredo_rag",
+                    "memory_store",
+                    serde_json::json!({
+                        "entry_id": entry.id,
+                        "agent_id": entry.agent_id,
+                        "key": entry.key,
+                        "content_type": entry.content_type,
+                        "importance": entry.importance,
+                    }),
+                ),
+            )
+            .await?;
 
         info!("[RAG] Stored entry {} in memory", entry.id);
         Ok(())
     }
 
     /// Search across all tiers, returning results sorted by relevance
-    pub async fn search(&self, query: &str, agent_id: Option<&str>, limit: usize) -> Result<Vec<SearchResult>, String> {
-        self.query_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    pub async fn search(
+        &self,
+        query: &str,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, String> {
+        self.query_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let query_embedding = MemoryEntry::compute_embedding(query);
         let mut results = Vec::new();
@@ -279,21 +289,23 @@ impl HierarchicalRAG {
         // L1: Search Redis (hot cache)
         // Redis doesn't support vector search natively, so we scan and compute similarity
         {
-            let all_l1: Vec<(String, String)> = self.bridge.get_all_state().await
-                .unwrap_or_default();
+            let all_l1: Vec<(String, String)> =
+                self.bridge.get_all_state().await.unwrap_or_default();
 
             for (key, val) in all_l1 {
                 if key.starts_with("rag:l1:") {
                     if let Ok(entry) = serde_json::from_str::<MemoryEntry>(&val) {
                         if agent_id.is_none() || agent_id.is_some_and(|aid| entry.agent_id == aid) {
-                            let similarity = MemoryEntry::cosine_similarity(&query_embedding, &entry.embedding);
+                            let similarity =
+                                MemoryEntry::cosine_similarity(&query_embedding, &entry.embedding);
                             if similarity > 0.3 {
                                 results.push(SearchResult {
                                     entry,
                                     score: similarity,
                                     source_tier: 1,
                                 });
-                                self.l1_hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                self.l1_hits
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                         }
                     }
@@ -306,7 +318,8 @@ impl HierarchicalRAG {
             let guard = self.sqlite_conn.lock().await;
             if let Some(conn) = guard.as_ref() {
                 // FTS5 search — must query the FTS virtual table, not the base table
-                let fts_query = query.split_whitespace()
+                let fts_query = query
+                    .split_whitespace()
                     .map(|w| format!("\"{}\"", w.replace('"', "")))
                     .collect::<Vec<_>>()
                     .join(" OR ");
@@ -322,39 +335,49 @@ impl HierarchicalRAG {
 
                 if let Some(ref mut stmt) = stmt {
                     let agent = agent_id.unwrap_or("");
-                    if let Ok(rows) = stmt.query_map(rusqlite::params![agent, fts_query, limit as i64], |row| {
-                        let embedding_blob: Vec<u8> = row.get(6).unwrap_or_default();
-                        let embedding: Vec<f64> = bincode::deserialize(&embedding_blob).unwrap_or_default();
-                        Ok(MemoryEntry {
-                            id: row.get(0)?,
-                            agent_id: row.get(1)?,
-                            key: row.get(2)?,
-                            content: row.get(3)?,
-                            content_type: row.get(4)?,
-                            source: row.get(5)?,
-                            embedding,
-                            importance: row.get(7)?,
-                            access_count: row.get::<_, i64>(8)? as u64,
-                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                    if let Ok(rows) =
+                        stmt.query_map(rusqlite::params![agent, fts_query, limit as i64], |row| {
+                            let embedding_blob: Vec<u8> = row.get(6).unwrap_or_default();
+                            let embedding: Vec<f64> =
+                                bincode::deserialize(&embedding_blob).unwrap_or_default();
+                            Ok(MemoryEntry {
+                                id: row.get(0)?,
+                                agent_id: row.get(1)?,
+                                key: row.get(2)?,
+                                content: row.get(3)?,
+                                content_type: row.get(4)?,
+                                source: row.get(5)?,
+                                embedding,
+                                importance: row.get(7)?,
+                                access_count: row.get::<_, i64>(8)? as u64,
+                                created_at: chrono::DateTime::parse_from_rfc3339(
+                                    &row.get::<_, String>(9)?,
+                                )
                                 .map(|d| d.with_timezone(&chrono::Utc))
                                 .unwrap_or_else(|_| chrono::Utc::now()),
-                            last_accessed: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                                last_accessed: chrono::DateTime::parse_from_rfc3339(
+                                    &row.get::<_, String>(10)?,
+                                )
                                 .map(|d| d.with_timezone(&chrono::Utc))
                                 .unwrap_or_else(|_| chrono::Utc::now()),
-                            ttl_days: row.get::<_, i32>(11)? as u32,
-                            tier: row.get::<_, i32>(12)? as u8,
-                            metadata: serde_json::from_str(&row.get::<_, String>(13)?).unwrap_or_default(),
+                                ttl_days: row.get::<_, i32>(11)? as u32,
+                                tier: row.get::<_, i32>(12)? as u8,
+                                metadata: serde_json::from_str(&row.get::<_, String>(13)?)
+                                    .unwrap_or_default(),
+                            })
                         })
-                    }) {
+                    {
                         for row in rows.flatten() {
-                            let similarity = MemoryEntry::cosine_similarity(&query_embedding, &row.embedding);
+                            let similarity =
+                                MemoryEntry::cosine_similarity(&query_embedding, &row.embedding);
                             if similarity > 0.2 {
                                 results.push(SearchResult {
                                     entry: row,
                                     score: similarity,
                                     source_tier: 2,
                                 });
-                                self.l2_hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                self.l2_hits
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                         }
                     }
@@ -363,7 +386,11 @@ impl HierarchicalRAG {
         }
 
         // Sort by relevance score (descending)
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(limit);
 
         // Update stats
@@ -381,8 +408,14 @@ impl HierarchicalRAG {
     pub async fn stats(&self) -> RAGStats {
         let l2_count = {
             let guard = self.sqlite_conn.lock().await;
-            guard.as_ref()
-                .and_then(|conn| conn.query_row("SELECT COUNT(*) FROM memory", [], |row| row.get::<_, i64>(0)).ok())
+            guard
+                .as_ref()
+                .and_then(|conn| {
+                    conn.query_row("SELECT COUNT(*) FROM memory", [], |row| {
+                        row.get::<_, i64>(0)
+                    })
+                    .ok()
+                })
                 .unwrap_or(0) as usize
         };
 

@@ -1,4 +1,7 @@
-use crate::{Candle, MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal, TradingSkill};
+use crate::{
+    Candle, MarketAnalysisContext, SignalDirection, SkillCategory, SkillError, SkillSignal,
+    TradingSkill,
+};
 use std::collections::HashMap;
 
 // ── Shared Helper Functions ───────────────────────────────────────────────
@@ -73,7 +76,9 @@ fn candles_to_volumes(candles: &[Candle]) -> Vec<f64> {
 
 fn min_max_last_n(data: &[f64], n: usize) -> (f64, f64) {
     let len = data.len();
-    if len == 0 { return (0.0, 0.0); }
+    if len == 0 {
+        return (0.0, 0.0);
+    }
     let start = len.saturating_sub(n);
     let slice = &data[start..];
     let min = slice.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -86,23 +91,35 @@ fn min_max_last_n(data: &[f64], n: usize) -> (f64, f64) {
 // ══════════════════════════════════════════════════════════════════════════
 
 pub struct IchimokuSkill {
-    pub tenkan_period: usize,  // 9
-    pub kijun_period: usize,   // 26
+    pub tenkan_period: usize,   // 9
+    pub kijun_period: usize,    // 26
     pub senkou_b_period: usize, // 52
 }
 
 impl Default for IchimokuSkill {
     fn default() -> Self {
-        Self { tenkan_period: 9, kijun_period: 26, senkou_b_period: 52 }
+        Self {
+            tenkan_period: 9,
+            kijun_period: 26,
+            senkou_b_period: 52,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for IchimokuSkill {
-    fn id(&self) -> &'static str { "ichimoku" }
-    fn name(&self) -> &'static str { "Ichimoku Cloud" }
-    fn description(&self) -> &'static str { "Comprehensive trend, support/resistance, and momentum indicator using multiple timeframes" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "ichimoku"
+    }
+    fn name(&self) -> &'static str {
+        "Ichimoku Cloud"
+    }
+    fn description(&self) -> &'static str {
+        "Comprehensive trend, support/resistance, and momentum indicator using multiple timeframes"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
@@ -110,22 +127,46 @@ impl TradingSkill for IchimokuSkill {
         let closes = candles_to_closes(&context.candles);
         let min_req = self.senkou_b_period + self.kijun_period;
         if closes.len() < min_req {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Ichimoku, got {}", min_req, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Ichimoku, got {}",
+                min_req,
+                closes.len()
+            )));
         }
 
         // Tenkan-sen (Conversion Line)
         let tenkan = |i: usize| -> f64 {
-            let start = if i >= self.tenkan_period { i - self.tenkan_period + 1 } else { 0 };
-            let h = highs[start..=i].iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let l = lows[start..=i].iter().cloned().fold(f64::INFINITY, f64::min);
+            let start = if i >= self.tenkan_period {
+                i - self.tenkan_period + 1
+            } else {
+                0
+            };
+            let h = highs[start..=i]
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
+            let l = lows[start..=i]
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min);
             (h + l) / 2.0
         };
 
         // Kijun-sen (Base Line)
         let kijun = |i: usize| -> f64 {
-            let start = if i >= self.kijun_period { i - self.kijun_period + 1 } else { 0 };
-            let h = highs[start..=i].iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let l = lows[start..=i].iter().cloned().fold(f64::INFINITY, f64::min);
+            let start = if i >= self.kijun_period {
+                i - self.kijun_period + 1
+            } else {
+                0
+            };
+            let h = highs[start..=i]
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
+            let l = lows[start..=i]
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min);
             (h + l) / 2.0
         };
 
@@ -135,9 +176,19 @@ impl TradingSkill for IchimokuSkill {
         let senkou_a = (tenkan_val + kijun_val) / 2.0;
 
         // Senkou Span B: (HH(52) + LL(52)) / 2
-        let senkou_start = if last_idx >= self.senkou_b_period { last_idx - self.senkou_b_period + 1 } else { 0 };
-        let hh = highs[senkou_start..=last_idx].iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let ll = lows[senkou_start..=last_idx].iter().cloned().fold(f64::INFINITY, f64::min);
+        let senkou_start = if last_idx >= self.senkou_b_period {
+            last_idx - self.senkou_b_period + 1
+        } else {
+            0
+        };
+        let hh = highs[senkou_start..=last_idx]
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let ll = lows[senkou_start..=last_idx]
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
         let senkou_b = (hh + ll) / 2.0;
 
         let price = context.current_price;
@@ -146,8 +197,16 @@ impl TradingSkill for IchimokuSkill {
         let in_cloud = price >= cloud_bottom && price <= cloud_top;
 
         // TK Cross: Tenkan crossing above/below Kijun = trend signal
-        let prev_tenkan = if last_idx >= 1 { tenkan(last_idx - 1) } else { tenkan_val };
-        let prev_kijun = if last_idx >= 1 { kijun(last_idx - 1) } else { kijun_val };
+        let prev_tenkan = if last_idx >= 1 {
+            tenkan(last_idx - 1)
+        } else {
+            tenkan_val
+        };
+        let prev_kijun = if last_idx >= 1 {
+            kijun(last_idx - 1)
+        } else {
+            kijun_val
+        };
         let tk_cross_bullish = prev_tenkan <= prev_kijun && tenkan_val > kijun_val;
         let tk_cross_bearish = prev_tenkan >= prev_kijun && tenkan_val < kijun_val;
 
@@ -160,15 +219,34 @@ impl TradingSkill for IchimokuSkill {
         let mut bullish_count = 0u32;
         let mut bearish_count = 0u32;
 
-        if price > cloud_top { bullish_count += 1; }
-        if price < cloud_bottom { bearish_count += 1; }
-        if tenkan_val > kijun_val { bullish_count += 1; } else { bearish_count += 1; }
-        if chikou_above { bullish_count += 1; } else { bearish_count += 1; }
-        if tk_cross_bullish { bullish_count += 2; }
-        if tk_cross_bearish { bearish_count += 2; }
+        if price > cloud_top {
+            bullish_count += 1;
+        }
+        if price < cloud_bottom {
+            bearish_count += 1;
+        }
+        if tenkan_val > kijun_val {
+            bullish_count += 1;
+        } else {
+            bearish_count += 1;
+        }
+        if chikou_above {
+            bullish_count += 1;
+        } else {
+            bearish_count += 1;
+        }
+        if tk_cross_bullish {
+            bullish_count += 2;
+        }
+        if tk_cross_bearish {
+            bearish_count += 2;
+        }
 
-        if bullish_count > bearish_count { direction = SignalDirection::Bullish; }
-        else if bearish_count > bullish_count { direction = SignalDirection::Bearish; }
+        if bullish_count > bearish_count {
+            direction = SignalDirection::Bullish;
+        } else if bearish_count > bullish_count {
+            direction = SignalDirection::Bearish;
+        }
 
         let cloud_thickness = ((cloud_top - cloud_bottom) / price) * 100.0;
         let strength = if tk_cross_bullish || tk_cross_bearish {
@@ -218,22 +296,36 @@ pub struct AdxSkill {
 }
 
 impl Default for AdxSkill {
-    fn default() -> Self { Self { period: 14 } }
+    fn default() -> Self {
+        Self { period: 14 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for AdxSkill {
-    fn id(&self) -> &'static str { "adx" }
-    fn name(&self) -> &'static str { "ADX (Average Directional Index)" }
-    fn description(&self) -> &'static str { "Measures trend strength regardless of direction using Wilder's method" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "adx"
+    }
+    fn name(&self) -> &'static str {
+        "ADX (Average Directional Index)"
+    }
+    fn description(&self) -> &'static str {
+        "Measures trend strength regardless of direction using Wilder's method"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period * 2 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for ADX, got {}", self.period * 2, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for ADX, got {}",
+                self.period * 2,
+                closes.len()
+            )));
         }
 
         let tr = true_ranges(&highs, &lows, &closes);
@@ -245,8 +337,16 @@ impl TradingSkill for AdxSkill {
         for i in 1..highs.len() {
             let up_move = highs[i] - highs[i - 1];
             let down_move = lows[i - 1] - lows[i];
-            dm_plus[i] = if up_move > down_move && up_move > 0.0 { up_move } else { 0.0 };
-            dm_minus[i] = if down_move > up_move && down_move > 0.0 { down_move } else { 0.0 };
+            dm_plus[i] = if up_move > down_move && up_move > 0.0 {
+                up_move
+            } else {
+                0.0
+            };
+            dm_minus[i] = if down_move > up_move && down_move > 0.0 {
+                down_move
+            } else {
+                0.0
+            };
         }
 
         let dm_plus_smooth = wilders_smoothing(dm_plus.as_slice(), self.period);
@@ -256,7 +356,9 @@ impl TradingSkill for AdxSkill {
         let mut di_plus = vec![0.0; tr_smooth.len()];
         let mut di_minus = vec![0.0; tr_smooth.len()];
         for i in 0..tr_smooth.len() {
-            if tr_smooth[i].is_nan() || tr_smooth[i] == 0.0 { continue; }
+            if tr_smooth[i].is_nan() || tr_smooth[i] == 0.0 {
+                continue;
+            }
             di_plus[i] = (dm_plus_smooth[i] / tr_smooth[i]) * 100.0;
             di_minus[i] = (dm_minus_smooth[i] / tr_smooth[i]) * 100.0;
         }
@@ -264,7 +366,9 @@ impl TradingSkill for AdxSkill {
         // DX and ADX
         let mut dx = vec![0.0; tr_smooth.len()];
         for i in 0..tr_smooth.len() {
-            if tr_smooth[i].is_nan() { continue; }
+            if tr_smooth[i].is_nan() {
+                continue;
+            }
             let sum = di_plus[i] + di_minus[i];
             if sum > 0.0 {
                 dx[i] = ((di_plus[i] - di_minus[i]).abs() / sum) * 100.0;
@@ -272,9 +376,24 @@ impl TradingSkill for AdxSkill {
         }
 
         let adx_values = wilders_smoothing(&dx, self.period);
-        let last_adx = adx_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(0.0);
-        let last_di_plus = di_plus.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(0.0);
-        let last_di_minus = di_minus.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(0.0);
+        let last_adx = adx_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(0.0);
+        let last_di_plus = di_plus
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(0.0);
+        let last_di_minus = di_minus
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(0.0);
 
         let trend_strong = last_adx >= 25.0;
         let di_bullish = last_di_plus > last_di_minus;
@@ -284,7 +403,11 @@ impl TradingSkill for AdxSkill {
         } else if trend_strong && !di_bullish {
             SignalDirection::Bearish
         } else if last_adx >= 20.0 {
-            if di_bullish { SignalDirection::Bullish } else { SignalDirection::Bearish }
+            if di_bullish {
+                SignalDirection::Bullish
+            } else {
+                SignalDirection::Bearish
+            }
         } else {
             SignalDirection::Neutral
         };
@@ -304,9 +427,22 @@ impl TradingSkill for AdxSkill {
             confidence: 0.75,
             details: format!(
                 "ADX({}) = {:.1}. DI+ = {:.1}, DI- = {:.1}. {} trend. {}",
-                self.period, last_adx, last_di_plus, last_di_minus,
-                if trend_strong { "★ STRONG" } else if last_adx >= 20.0 { "Moderate" } else { "Weak" },
-                if di_bullish { "DI+ > DI- = bullish bias" } else { "DI- > DI+ = bearish bias" }
+                self.period,
+                last_adx,
+                last_di_plus,
+                last_di_minus,
+                if trend_strong {
+                    "★ STRONG"
+                } else if last_adx >= 20.0 {
+                    "Moderate"
+                } else {
+                    "Weak"
+                },
+                if di_bullish {
+                    "DI+ > DI- = bullish bias"
+                } else {
+                    "DI- > DI+ = bearish bias"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -324,22 +460,39 @@ pub struct SuperTrendSkill {
 }
 
 impl Default for SuperTrendSkill {
-    fn default() -> Self { Self { period: 10, multiplier: 3.0 } }
+    fn default() -> Self {
+        Self {
+            period: 10,
+            multiplier: 3.0,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for SuperTrendSkill {
-    fn id(&self) -> &'static str { "supertrend" }
-    fn name(&self) -> &'static str { "SuperTrend" }
-    fn description(&self) -> &'static str { "Volatility-based trend following indicator using ATR for dynamic support/resistance" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "supertrend"
+    }
+    fn name(&self) -> &'static str {
+        "SuperTrend"
+    }
+    fn description(&self) -> &'static str {
+        "Volatility-based trend following indicator using ATR for dynamic support/resistance"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for SuperTrend, got {}", self.period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for SuperTrend, got {}",
+                self.period + 5,
+                closes.len()
+            )));
         }
 
         let tr = true_ranges(&highs, &lows, &closes);
@@ -349,7 +502,9 @@ impl TradingSkill for SuperTrendSkill {
         let mut in_uptrend = vec![true; closes.len()]; // true = uptrend
 
         for i in self.period..closes.len() {
-            if atr_values[i].is_nan() { continue; }
+            if atr_values[i].is_nan() {
+                continue;
+            }
             let hl2 = (highs[i] + lows[i]) / 2.0;
             let atr = atr_values[i];
             let mut upper_band = hl2 + self.multiplier * atr;
@@ -358,8 +513,12 @@ impl TradingSkill for SuperTrendSkill {
             if i > self.period {
                 let prev_upper = hl2 + self.multiplier * atr_values[i - 1];
                 let prev_lower = hl2 - self.multiplier * atr_values[i - 1];
-                if closes[i - 1] <= prev_upper { upper_band = upper_band.min(prev_upper); }
-                if closes[i - 1] >= prev_lower { lower_band = lower_band.max(prev_lower); }
+                if closes[i - 1] <= prev_upper {
+                    upper_band = upper_band.min(prev_upper);
+                }
+                if closes[i - 1] >= prev_lower {
+                    lower_band = lower_band.max(prev_lower);
+                }
             }
 
             if closes[i] > upper_band {
@@ -370,14 +529,28 @@ impl TradingSkill for SuperTrendSkill {
                 in_uptrend[i] = in_uptrend[i - 1];
             }
 
-            supertrend[i] = if in_uptrend[i] { lower_band } else { upper_band };
+            supertrend[i] = if in_uptrend[i] {
+                lower_band
+            } else {
+                upper_band
+            };
         }
 
         let current_up = in_uptrend.iter().rev().copied().next().unwrap_or(true);
-        let prev_up = in_uptrend.iter().rev().skip(1).copied().next().unwrap_or(true);
+        let prev_up = in_uptrend
+            .iter()
+            .rev()
+            .skip(1)
+            .copied()
+            .next()
+            .unwrap_or(true);
         let just_reversed = current_up != prev_up;
 
-        let direction = if current_up { SignalDirection::Bullish } else { SignalDirection::Bearish };
+        let direction = if current_up {
+            SignalDirection::Bullish
+        } else {
+            SignalDirection::Bearish
+        };
         let strength = if just_reversed { 0.9 } else { 0.7 };
 
         let last_st = *supertrend.iter().rev().find(|&&v| v != 0.0).unwrap_or(&0.0);
@@ -400,10 +573,16 @@ impl TradingSkill for SuperTrendSkill {
             confidence: 0.72,
             details: format!(
                 "SuperTrend({},{}) — Price is in {}trend. Reversal point: ${:.2} ({:.1}% away).{}",
-                self.period, self.multiplier,
+                self.period,
+                self.multiplier,
                 if current_up { "UP" } else { "DOWN" },
-                last_st, dist_pct,
-                if just_reversed { " ★ JUST REVERSED!" } else { "" }
+                last_st,
+                dist_pct,
+                if just_reversed {
+                    " ★ JUST REVERSED!"
+                } else {
+                    ""
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -423,23 +602,38 @@ pub struct ParabolicSarSkill {
 
 impl Default for ParabolicSarSkill {
     fn default() -> Self {
-        Self { acceleration: 0.02, acceleration_max: 0.20, increment: 0.02 }
+        Self {
+            acceleration: 0.02,
+            acceleration_max: 0.20,
+            increment: 0.02,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for ParabolicSarSkill {
-    fn id(&self) -> &'static str { "parabolic_sar" }
-    fn name(&self) -> &'static str { "Parabolic SAR" }
-    fn description(&self) -> &'static str { "Trend-following indicator that identifies potential reversals with accelerating stop levels" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "parabolic_sar"
+    }
+    fn name(&self) -> &'static str {
+        "Parabolic SAR"
+    }
+    fn description(&self) -> &'static str {
+        "Trend-following indicator that identifies potential reversals with accelerating stop levels"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < 15 {
-            return Err(SkillError::InsufficientData(format!("Need 15+ candles for PSAR, got {}", closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need 15+ candles for PSAR, got {}",
+                closes.len()
+            )));
         }
 
         // Compute PSAR values iteratively
@@ -497,11 +691,24 @@ impl TradingSkill for ParabolicSarSkill {
 
         let current_long = is_long;
         let current_sar = sar[closes.len() - 1];
-        let prev_sar = if closes.len() >= 2 { sar[closes.len() - 2] } else { current_sar };
-        let just_reversed = (current_long && prev_sar > current_sar) || (!current_long && prev_sar < current_sar);
+        let prev_sar = if closes.len() >= 2 {
+            sar[closes.len() - 2]
+        } else {
+            current_sar
+        };
+        let just_reversed =
+            (current_long && prev_sar > current_sar) || (!current_long && prev_sar < current_sar);
 
-        let direction = if current_long { SignalDirection::Bullish } else { SignalDirection::Bearish };
-        let strength = if just_reversed { 0.88 } else { (closes.len() as f64 * af).min(0.7) };
+        let direction = if current_long {
+            SignalDirection::Bullish
+        } else {
+            SignalDirection::Bearish
+        };
+        let strength = if just_reversed {
+            0.88
+        } else {
+            (closes.len() as f64 * af).min(0.7)
+        };
         let dist_pct = ((context.current_price - current_sar) / current_sar).abs() * 100.0;
 
         let mut indicators = HashMap::new();
@@ -539,30 +746,57 @@ pub struct KeltnerChannelsSkill {
 }
 
 impl Default for KeltnerChannelsSkill {
-    fn default() -> Self { Self { period: 20, multiplier: 2.0 } }
+    fn default() -> Self {
+        Self {
+            period: 20,
+            multiplier: 2.0,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for KeltnerChannelsSkill {
-    fn id(&self) -> &'static str { "keltner" }
-    fn name(&self) -> &'static str { "Keltner Channels" }
-    fn description(&self) -> &'static str { "Volatility-based envelopes using EMA and ATR for trend and breakout detection" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "keltner"
+    }
+    fn name(&self) -> &'static str {
+        "Keltner Channels"
+    }
+    fn description(&self) -> &'static str {
+        "Volatility-based envelopes using EMA and ATR for trend and breakout detection"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Keltner, got {}", self.period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Keltner, got {}",
+                self.period + 5,
+                closes.len()
+            )));
         }
 
         let ema = ema_values(&closes, self.period);
         let tr = true_ranges(&highs, &lows, &closes);
         let atr_values = wilders_smoothing(&tr, self.period);
 
-        let last_ema = ema.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(context.current_price);
-        let last_atr = atr_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(0.0);
+        let last_ema = ema
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(context.current_price);
+        let last_atr = atr_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(0.0);
 
         let upper = last_ema + self.multiplier * last_atr;
         let lower = last_ema - self.multiplier * last_atr;
@@ -623,21 +857,35 @@ pub struct AroonSkill {
 }
 
 impl Default for AroonSkill {
-    fn default() -> Self { Self { period: 25 } }
+    fn default() -> Self {
+        Self { period: 25 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for AroonSkill {
-    fn id(&self) -> &'static str { "aroon" }
-    fn name(&self) -> &'static str { "Aroon Indicator" }
-    fn description(&self) -> &'static str { "Identifies trend direction and strength by measuring time since recent highs/lows" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "aroon"
+    }
+    fn name(&self) -> &'static str {
+        "Aroon Indicator"
+    }
+    fn description(&self) -> &'static str {
+        "Identifies trend direction and strength by measuring time since recent highs/lows"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         if highs.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Aroon, got {}", self.period + 5, highs.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Aroon, got {}",
+                self.period + 5,
+                highs.len()
+            )));
         }
 
         let len = highs.len();
@@ -645,12 +893,14 @@ impl TradingSkill for AroonSkill {
         let recent_highs = &highs[start..];
         let recent_lows = &lows[start..];
 
-        let highest_idx = recent_highs.iter()
+        let highest_idx = recent_highs
+            .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("High values should not be NaN"))
             .map(|(i, _)| i)
             .unwrap_or(0);
-        let lowest_idx = recent_lows.iter()
+        let lowest_idx = recent_lows
+            .iter()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).expect("Low values should not be NaN"))
             .map(|(i, _)| i)
@@ -690,12 +940,24 @@ impl TradingSkill for AroonSkill {
             confidence: 0.68,
             details: format!(
                 "Aroon({}) — Up: {:.0}, Down: {:.0}, Osc: {:.0}. {}{}",
-                self.period, aroon_up, aroon_down, oscillator,
-                if up_strong { "★ Strong uptrend — recent highs" }
-                else if down_strong { "★ Strong downtrend — recent lows" }
-                else if oscillator > 0.0 { "Uptrend forming" }
-                else { "Downtrend forming" },
-                if up_strong && down_strong { " (ranging — new highs AND lows)" } else { "" }
+                self.period,
+                aroon_up,
+                aroon_down,
+                oscillator,
+                if up_strong {
+                    "★ Strong uptrend — recent highs"
+                } else if down_strong {
+                    "★ Strong downtrend — recent lows"
+                } else if oscillator > 0.0 {
+                    "Uptrend forming"
+                } else {
+                    "Downtrend forming"
+                },
+                if up_strong && down_strong {
+                    " (ranging — new highs AND lows)"
+                } else {
+                    ""
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -711,23 +973,45 @@ pub struct PivotPointsSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for PivotPointsSkill {
-    fn id(&self) -> &'static str { "pivot_points" }
-    fn name(&self) -> &'static str { "Pivot Points" }
-    fn description(&self) -> &'static str { "Classic pivot point levels for support/resistance based on previous period's high, low, close" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "pivot_points"
+    }
+    fn name(&self) -> &'static str {
+        "Pivot Points"
+    }
+    fn description(&self) -> &'static str {
+        "Classic pivot point levels for support/resistance based on previous period's high, low, close"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < 2 {
-            return Err(SkillError::InsufficientData("Need at least 2 candles for pivot points".to_string()));
+            return Err(SkillError::InsufficientData(
+                "Need at least 2 candles for pivot points".to_string(),
+            ));
         }
 
         // Use the last complete candle (or previous day's) high/low/close
-        let prev_high = if highs.len() >= 2 { highs[highs.len() - 2] } else { highs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) };
-        let prev_low = if lows.len() >= 2 { lows[lows.len() - 2] } else { lows.iter().cloned().fold(f64::INFINITY, f64::min) };
-        let prev_close = if closes.len() >= 2 { closes[closes.len() - 2] } else { context.current_price };
+        let prev_high = if highs.len() >= 2 {
+            highs[highs.len() - 2]
+        } else {
+            highs.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        };
+        let prev_low = if lows.len() >= 2 {
+            lows[lows.len() - 2]
+        } else {
+            lows.iter().cloned().fold(f64::INFINITY, f64::min)
+        };
+        let prev_close = if closes.len() >= 2 {
+            closes[closes.len() - 2]
+        } else {
+            context.current_price
+        };
 
         let pivot = (prev_high + prev_low + prev_close) / 3.0;
         let r1 = 2.0 * pivot - prev_low;
@@ -792,33 +1076,59 @@ pub struct ChandelierExitSkill {
 }
 
 impl Default for ChandelierExitSkill {
-    fn default() -> Self { Self { period: 22, multiplier: 3.0 } }
+    fn default() -> Self {
+        Self {
+            period: 22,
+            multiplier: 3.0,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for ChandelierExitSkill {
-    fn id(&self) -> &'static str { "chandelier_exit" }
-    fn name(&self) -> &'static str { "Chandelier Exit" }
-    fn description(&self) -> &'static str { "Volatility-based trailing stop that sets a stop-loss below the recent high using ATR" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "chandelier_exit"
+    }
+    fn name(&self) -> &'static str {
+        "Chandelier Exit"
+    }
+    fn description(&self) -> &'static str {
+        "Volatility-based trailing stop that sets a stop-loss below the recent high using ATR"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Chandelier, got {}", self.period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Chandelier, got {}",
+                self.period + 5,
+                closes.len()
+            )));
         }
 
         let tr = true_ranges(&highs, &lows, &closes);
         let atr_values = wilders_smoothing(&tr, self.period);
-        let last_atr = atr_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(0.0);
+        let last_atr = atr_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(0.0);
 
         let len = closes.len();
-        let recent_high = highs[len.saturating_sub(self.period)..].iter()
-            .cloned().fold(f64::NEG_INFINITY, f64::max);
-        let recent_low = lows[len.saturating_sub(self.period)..].iter()
-            .cloned().fold(f64::INFINITY, f64::min);
+        let recent_high = highs[len.saturating_sub(self.period)..]
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let recent_low = lows[len.saturating_sub(self.period)..]
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
 
         let long_stop = recent_high - self.multiplier * last_atr;
         let short_stop = recent_low + self.multiplier * last_atr;
@@ -871,22 +1181,36 @@ pub struct WilliamsRSkill {
 }
 
 impl Default for WilliamsRSkill {
-    fn default() -> Self { Self { period: 14 } }
+    fn default() -> Self {
+        Self { period: 14 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for WilliamsRSkill {
-    fn id(&self) -> &'static str { "williams_r" }
-    fn name(&self) -> &'static str { "Williams %R" }
-    fn description(&self) -> &'static str { "Momentum oscillator measuring overbought/oversold levels relative to highest high" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "williams_r"
+    }
+    fn name(&self) -> &'static str {
+        "Williams %R"
+    }
+    fn description(&self) -> &'static str {
+        "Momentum oscillator measuring overbought/oversold levels relative to highest high"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.period + 1 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Williams %R, got {}", self.period + 1, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Williams %R, got {}",
+                self.period + 1,
+                closes.len()
+            )));
         }
 
         let (hh, ll) = min_max_last_n(&highs, self.period);
@@ -928,14 +1252,24 @@ impl TradingSkill for WilliamsRSkill {
             confidence: 0.7,
             details: format!(
                 "Williams %R({}) = {:.1}. {} (thresholds: -20 overbought / -80 oversold). {}",
-                self.period, williams_r,
-                if williams_r > -20.0 { "★ OVERBOUGHT — potential reversal down" }
-                else if williams_r < -80.0 { "★ OVERSOLD — potential reversal up" }
-                else if williams_r > -50.0 { "Bearish zone" }
-                else { "Bullish zone" },
-                if williams_r.abs() < 10.0 { "Strong momentum" }
-                else if williams_r.abs() > 90.0 { "Extreme exhaustion" }
-                else { "Normal momentum range" }
+                self.period,
+                williams_r,
+                if williams_r > -20.0 {
+                    "★ OVERBOUGHT — potential reversal down"
+                } else if williams_r < -80.0 {
+                    "★ OVERSOLD — potential reversal up"
+                } else if williams_r > -50.0 {
+                    "Bearish zone"
+                } else {
+                    "Bullish zone"
+                },
+                if williams_r.abs() < 10.0 {
+                    "Strong momentum"
+                } else if williams_r.abs() > 90.0 {
+                    "Extreme exhaustion"
+                } else {
+                    "Normal momentum range"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -951,16 +1285,26 @@ pub struct ObvSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for ObvSkill {
-    fn id(&self) -> &'static str { "obv" }
-    fn name(&self) -> &'static str { "On-Balance Volume (OBV)" }
-    fn description(&self) -> &'static str { "Volume-based momentum indicator that relates volume flow to price movements" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "obv"
+    }
+    fn name(&self) -> &'static str {
+        "On-Balance Volume (OBV)"
+    }
+    fn description(&self) -> &'static str {
+        "Volume-based momentum indicator that relates volume flow to price movements"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         let volumes = candles_to_volumes(&context.candles);
         if closes.len() < 10 {
-            return Err(SkillError::InsufficientData("Need at least 10 candles for OBV".to_string()));
+            return Err(SkillError::InsufficientData(
+                "Need at least 10 candles for OBV".to_string(),
+            ));
         }
 
         // Calculate OBV
@@ -979,11 +1323,16 @@ impl TradingSkill for ObvSkill {
 
         // Calculate OBV trend: recent OBV vs older OBV
         let recent_obv = obv_values[obv_values.len() - 1];
-        let obv_20_periods_ago = if obv_values.len() > 20 { obv_values[obv_values.len() - 21] } else { obv_values.first().copied().unwrap_or(0.0) };
+        let obv_20_periods_ago = if obv_values.len() > 20 {
+            obv_values[obv_values.len() - 21]
+        } else {
+            obv_values.first().copied().unwrap_or(0.0)
+        };
         let obv_trend = (recent_obv - obv_20_periods_ago) / obv_20_periods_ago.abs().max(1.0);
 
         // OBV vs Price divergence
-        let price_trend = (closes[closes.len() - 1] - closes[closes.len().saturating_sub(20)]) / closes[closes.len().saturating_sub(20)].max(0.001);
+        let price_trend = (closes[closes.len() - 1] - closes[closes.len().saturating_sub(20)])
+            / closes[closes.len().saturating_sub(20)].max(0.001);
         let divergence = (obv_trend - price_trend).signum() != 0.0;
 
         let direction = if obv_trend > 0.02 && price_trend > 0.0 {
@@ -998,7 +1347,11 @@ impl TradingSkill for ObvSkill {
             SignalDirection::Neutral
         };
 
-        let strength = if divergence { 0.8 } else { (obv_trend.abs() * 10.0).clamp(0.2, 0.7) };
+        let strength = if divergence {
+            0.8
+        } else {
+            (obv_trend.abs() * 10.0).clamp(0.2, 0.7)
+        };
 
         let mut indicators = HashMap::new();
         indicators.insert("obv".to_string(), recent_obv);
@@ -1013,12 +1366,19 @@ impl TradingSkill for ObvSkill {
             confidence: 0.6,
             details: format!(
                 "OBV: OBV trend={:.4}, Price trend={:.4}. {}.",
-                obv_trend, price_trend,
-                if obv_trend > 0.0 && price_trend > 0.0 { "Volume confirming uptrend — bullish" }
-                else if obv_trend < 0.0 && price_trend < 0.0 { "Volume confirming downtrend — bearish" }
-                else if obv_trend > 0.0 && price_trend < 0.0 { "★ BULLISH DIVERGENCE — price falling on rising volume" }
-                else if obv_trend < 0.0 && price_trend > 0.0 { "★ BEARISH DIVERGENCE — price rising on falling volume" }
-                else { "No clear OBV signal" }
+                obv_trend,
+                price_trend,
+                if obv_trend > 0.0 && price_trend > 0.0 {
+                    "Volume confirming uptrend — bullish"
+                } else if obv_trend < 0.0 && price_trend < 0.0 {
+                    "Volume confirming downtrend — bearish"
+                } else if obv_trend > 0.0 && price_trend < 0.0 {
+                    "★ BULLISH DIVERGENCE — price falling on rising volume"
+                } else if obv_trend < 0.0 && price_trend > 0.0 {
+                    "★ BEARISH DIVERGENCE — price rising on falling volume"
+                } else {
+                    "No clear OBV signal"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -1035,15 +1395,25 @@ pub struct ChaikinMoneyFlowSkill {
 }
 
 impl Default for ChaikinMoneyFlowSkill {
-    fn default() -> Self { Self { period: 20 } }
+    fn default() -> Self {
+        Self { period: 20 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for ChaikinMoneyFlowSkill {
-    fn id(&self) -> &'static str { "chaikin_mf" }
-    fn name(&self) -> &'static str { "Chaikin Money Flow (CMF)" }
-    fn description(&self) -> &'static str { "Volume-weighted indicator measuring accumulation/distribution pressure over time" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "chaikin_mf"
+    }
+    fn name(&self) -> &'static str {
+        "Chaikin Money Flow (CMF)"
+    }
+    fn description(&self) -> &'static str {
+        "Volume-weighted indicator measuring accumulation/distribution pressure over time"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
@@ -1051,7 +1421,11 @@ impl TradingSkill for ChaikinMoneyFlowSkill {
         let closes = candles_to_closes(&context.candles);
         let volumes = candles_to_volumes(&context.candles);
         if closes.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for CMF, got {}", self.period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for CMF, got {}",
+                self.period + 5,
+                closes.len()
+            )));
         }
 
         let len = closes.len();
@@ -1062,7 +1436,9 @@ impl TradingSkill for ChaikinMoneyFlowSkill {
 
         for i in start..len {
             let range = highs[i] - lows[i];
-            if range <= 0.0 { continue; }
+            if range <= 0.0 {
+                continue;
+            }
             // Money Flow Multiplier: [(Close - Low) - (High - Close)] / (High - Low)
             let multiplier = ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range;
             let mfv = multiplier * volumes[i];
@@ -1101,12 +1477,19 @@ impl TradingSkill for ChaikinMoneyFlowSkill {
             confidence: 0.65,
             details: format!(
                 "Chaikin Money Flow({}) = {:.3}. {}.",
-                self.period, cmf,
-                if cmf > 0.3 { "★ STRONG ACCUMULATION — buyers in control" }
-                else if cmf > 0.1 { "Mild accumulation — buyers slightly ahead" }
-                else if cmf < -0.3 { "★ STRONG DISTRIBUTION — sellers in control" }
-                else if cmf < -0.1 { "Mild distribution — sellers slightly ahead" }
-                else { "Neutral flow — balanced buying/selling" }
+                self.period,
+                cmf,
+                if cmf > 0.3 {
+                    "★ STRONG ACCUMULATION — buyers in control"
+                } else if cmf > 0.1 {
+                    "Mild accumulation — buyers slightly ahead"
+                } else if cmf < -0.3 {
+                    "★ STRONG DISTRIBUTION — sellers in control"
+                } else if cmf < -0.1 {
+                    "Mild distribution — sellers slightly ahead"
+                } else {
+                    "Neutral flow — balanced buying/selling"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -1127,24 +1510,40 @@ pub struct StochasticSkill {
 
 impl Default for StochasticSkill {
     fn default() -> Self {
-        Self { k_period: 14, d_period: 3, oversold: 20.0, overbought: 80.0 }
+        Self {
+            k_period: 14,
+            d_period: 3,
+            oversold: 20.0,
+            overbought: 80.0,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for StochasticSkill {
-    fn id(&self) -> &'static str { "stochastic" }
-    fn name(&self) -> &'static str { "Stochastic Oscillator" }
-    fn description(&self) -> &'static str { "Momentum oscillator comparing close to price range, identifying reversal zones" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "stochastic"
+    }
+    fn name(&self) -> &'static str {
+        "Stochastic Oscillator"
+    }
+    fn description(&self) -> &'static str {
+        "Momentum oscillator comparing close to price range, identifying reversal zones"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.k_period + self.d_period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Stochastic, got {}",
-                self.k_period + self.d_period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Stochastic, got {}",
+                self.k_period + self.d_period + 5,
+                closes.len()
+            )));
         }
 
         // Calculate %K values
@@ -1154,8 +1553,14 @@ impl TradingSkill for StochasticSkill {
                 k_values.push(f64::NAN);
             } else {
                 let start = i - (self.k_period - 1);
-                let hh = highs[start..=i].iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                let ll = lows[start..=i].iter().cloned().fold(f64::INFINITY, f64::min);
+                let hh = highs[start..=i]
+                    .iter()
+                    .cloned()
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let ll = lows[start..=i]
+                    .iter()
+                    .cloned()
+                    .fold(f64::INFINITY, f64::min);
                 let range = hh - ll;
                 let k = if range > 0.0 {
                     ((closes[i] - ll) / range) * 100.0
@@ -1183,10 +1588,32 @@ impl TradingSkill for StochasticSkill {
             vec![]
         };
 
-        let k = k_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(50.0);
-        let d = d_values.iter().rev().find(|v| !v.is_nan()).copied().unwrap_or(50.0);
-        let prev_k = k_values.iter().rev().skip(1).find(|v| !v.is_nan()).copied().unwrap_or(k);
-        let prev_d = d_values.iter().rev().skip(1).find(|v| !v.is_nan()).copied().unwrap_or(d);
+        let k = k_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(50.0);
+        let d = d_values
+            .iter()
+            .rev()
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(50.0);
+        let prev_k = k_values
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(k);
+        let prev_d = d_values
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|v| !v.is_nan())
+            .copied()
+            .unwrap_or(d);
 
         let k_cross_above_d = prev_k <= prev_d && k > d;
         let k_cross_below_d = prev_k >= prev_d && k < d;
@@ -1205,13 +1632,14 @@ impl TradingSkill for StochasticSkill {
             SignalDirection::Bearish
         };
 
-        let strength = if (k_cross_above_d && k < self.oversold) || (k_cross_below_d && k > self.overbought) {
-            0.9
-        } else if k < self.oversold || k > self.overbought {
-            0.7
-        } else {
-            (k / 100.0).clamp(0.2, 0.8)
-        };
+        let strength =
+            if (k_cross_above_d && k < self.oversold) || (k_cross_below_d && k > self.overbought) {
+                0.9
+            } else if k < self.oversold || k > self.overbought {
+                0.7
+            } else {
+                (k / 100.0).clamp(0.2, 0.8)
+            };
 
         let mut indicators = HashMap::new();
         indicators.insert("k".to_string(), k);
@@ -1227,14 +1655,30 @@ impl TradingSkill for StochasticSkill {
             confidence: 0.72,
             details: format!(
                 "Stochastic({},{}) — %K={:.1}, %D={:.1}. {}{}",
-                self.k_period, self.d_period, k, d,
-                if k < self.oversold && k_cross_above_d { "★ OVERSOLD + %K above %D — bullish reversal signal" }
-                else if k > self.overbought && k_cross_below_d { "★ OVERBOUGHT + %K below %D — bearish reversal signal" }
-                else if k < self.oversold { "Oversold zone — watch for %K upcross" }
-                else if k > self.overbought { "Overbought zone — watch for %K downcross" }
-                else if k > 50.0 { "Bullish momentum" }
-                else { "Bearish momentum" },
-                if k_cross_above_d { " (bullish cross)" } else if k_cross_below_d { " (bearish cross)" } else { "" }
+                self.k_period,
+                self.d_period,
+                k,
+                d,
+                if k < self.oversold && k_cross_above_d {
+                    "★ OVERSOLD + %K above %D — bullish reversal signal"
+                } else if k > self.overbought && k_cross_below_d {
+                    "★ OVERBOUGHT + %K below %D — bearish reversal signal"
+                } else if k < self.oversold {
+                    "Oversold zone — watch for %K upcross"
+                } else if k > self.overbought {
+                    "Overbought zone — watch for %K downcross"
+                } else if k > 50.0 {
+                    "Bullish momentum"
+                } else {
+                    "Bearish momentum"
+                },
+                if k_cross_above_d {
+                    " (bullish cross)"
+                } else if k_cross_below_d {
+                    " (bearish cross)"
+                } else {
+                    ""
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -1251,21 +1695,35 @@ pub struct DonchianChannelsSkill {
 }
 
 impl Default for DonchianChannelsSkill {
-    fn default() -> Self { Self { period: 20 } }
+    fn default() -> Self {
+        Self { period: 20 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for DonchianChannelsSkill {
-    fn id(&self) -> &'static str { "donchian" }
-    fn name(&self) -> &'static str { "Donchian Channels" }
-    fn description(&self) -> &'static str { "Breakout detection using highest high and lowest low over a period (Turtle System)" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "donchian"
+    }
+    fn name(&self) -> &'static str {
+        "Donchian Channels"
+    }
+    fn description(&self) -> &'static str {
+        "Breakout detection using highest high and lowest low over a period (Turtle System)"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         if highs.len() < self.period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Donchian, got {}", self.period + 5, highs.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Donchian, got {}",
+                self.period + 5,
+                highs.len()
+            )));
         }
 
         let (hh, _) = min_max_last_n(&highs, self.period);
@@ -1277,11 +1735,15 @@ impl TradingSkill for DonchianChannelsSkill {
         let prev_hh = if highs.len() > self.period + 1 {
             let (ph, _) = min_max_last_n(&highs[..highs.len() - 1], self.period);
             ph
-        } else { hh };
+        } else {
+            hh
+        };
         let prev_ll = if lows.len() > self.period + 1 {
             let (_, pl) = min_max_last_n(&lows[..lows.len() - 1], self.period);
             pl
-        } else { ll };
+        } else {
+            ll
+        };
 
         let breakout_high = price > prev_hh && price >= hh;
         let breakout_low = price < prev_ll && price <= ll;
@@ -1344,10 +1806,18 @@ pub struct HeikinAshiSkill;
 
 #[async_trait::async_trait]
 impl TradingSkill for HeikinAshiSkill {
-    fn id(&self) -> &'static str { "heikin_ashi" }
-    fn name(&self) -> &'static str { "Heikin-Ashi Trend" }
-    fn description(&self) -> &'static str { "Smoothed candlestick technique that filters market noise for clearer trend signals" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "heikin_ashi"
+    }
+    fn name(&self) -> &'static str {
+        "Heikin-Ashi Trend"
+    }
+    fn description(&self) -> &'static str {
+        "Smoothed candlestick technique that filters market noise for clearer trend signals"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
@@ -1355,7 +1825,9 @@ impl TradingSkill for HeikinAshiSkill {
         let opens = context.candles.iter().map(|c| c.open).collect::<Vec<_>>();
         let closes = candles_to_closes(&context.candles);
         if closes.len() < 5 {
-            return Err(SkillError::InsufficientData("Need at least 5 candles for Heikin-Ashi".to_string()));
+            return Err(SkillError::InsufficientData(
+                "Need at least 5 candles for Heikin-Ashi".to_string(),
+            ));
         }
 
         // Calculate HA candles
@@ -1392,8 +1864,12 @@ impl TradingSkill for HeikinAshiSkill {
         }
 
         // HA color changes = trend reversals
-        let just_bullish = ha_len >= 2 && ha_close[ha_len - 1] > ha_open[ha_len - 1] && ha_close[ha_len - 2] <= ha_open[ha_len - 2];
-        let just_bearish = ha_len >= 2 && ha_close[ha_len - 1] <= ha_open[ha_len - 1] && ha_close[ha_len - 2] > ha_open[ha_len - 2];
+        let just_bullish = ha_len >= 2
+            && ha_close[ha_len - 1] > ha_open[ha_len - 1]
+            && ha_close[ha_len - 2] <= ha_open[ha_len - 2];
+        let just_bearish = ha_len >= 2
+            && ha_close[ha_len - 1] <= ha_open[ha_len - 1]
+            && ha_close[ha_len - 2] > ha_open[ha_len - 2];
 
         let direction = if just_bullish || bullish_candles > bearish_candles {
             SignalDirection::Bullish
@@ -1412,11 +1888,18 @@ impl TradingSkill for HeikinAshiSkill {
         };
 
         let ha_current = ha_close[ha_len - 1];
-        let ha_prev = if ha_len >= 2 { ha_close[ha_len - 2] } else { ha_current };
+        let ha_prev = if ha_len >= 2 {
+            ha_close[ha_len - 2]
+        } else {
+            ha_current
+        };
 
         let mut indicators = HashMap::new();
         indicators.insert("ha_current".to_string(), ha_current);
-        indicators.insert("ha_trend_strength".to_string(), consecutive_up.max(consecutive_down) as f64);
+        indicators.insert(
+            "ha_trend_strength".to_string(),
+            consecutive_up.max(consecutive_down) as f64,
+        );
         indicators.insert("consecutive_up".to_string(), consecutive_up as f64);
         indicators.insert("consecutive_down".to_string(), consecutive_down as f64);
 
@@ -1429,13 +1912,24 @@ impl TradingSkill for HeikinAshiSkill {
             details: format!(
                 "Heikin-Ashi: {} consecutive {} candles. HA went from ${:.2} → ${:.2}. {}.",
                 consecutive_up.max(consecutive_down),
-                if consecutive_up > consecutive_down { "GREEN (bullish)" } else { "RED (bearish)" },
-                ha_prev, ha_current,
-                if just_bullish { "★ BULLISH REVERSAL — red to green" }
-                else if just_bearish { "★ BEARISH REVERSAL — green to red" }
-                else if consecutive_up >= 3 { "★ Strong uptrend — multiple green HA candles" }
-                else if consecutive_down >= 3 { "★ Strong downtrend — multiple red HA candles" }
-                else { "Mixed HA candles — ranging" }
+                if consecutive_up > consecutive_down {
+                    "GREEN (bullish)"
+                } else {
+                    "RED (bearish)"
+                },
+                ha_prev,
+                ha_current,
+                if just_bullish {
+                    "★ BULLISH REVERSAL — red to green"
+                } else if just_bearish {
+                    "★ BEARISH REVERSAL — green to red"
+                } else if consecutive_up >= 3 {
+                    "★ Strong uptrend — multiple green HA candles"
+                } else if consecutive_down >= 3 {
+                    "★ Strong downtrend — multiple red HA candles"
+                } else {
+                    "Mixed HA candles — ranging"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -1452,22 +1946,35 @@ pub struct MarketStructureSkill {
 }
 
 impl Default for MarketStructureSkill {
-    fn default() -> Self { Self { swing_lookback: 5 } }
+    fn default() -> Self {
+        Self { swing_lookback: 5 }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for MarketStructureSkill {
-    fn id(&self) -> &'static str { "market_structure" }
-    fn name(&self) -> &'static str { "Market Structure (BOS/CHoCH)" }
-    fn description(&self) -> &'static str { "Identifies break of structure (BOS) and change of character (CHoCH) for order-flow analysis" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "market_structure"
+    }
+    fn name(&self) -> &'static str {
+        "Market Structure (BOS/CHoCH)"
+    }
+    fn description(&self) -> &'static str {
+        "Identifies break of structure (BOS) and change of character (CHoCH) for order-flow analysis"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let highs = candles_to_highs(&context.candles);
         let lows = candles_to_lows(&context.candles);
         if highs.len() < self.swing_lookback * 4 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for market structure, got {}",
-                self.swing_lookback * 4, highs.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for market structure, got {}",
+                self.swing_lookback * 4,
+                highs.len()
+            )));
         }
 
         let len = highs.len();
@@ -1480,11 +1987,15 @@ impl TradingSkill for MarketStructureSkill {
         for i in lookback..(len - lookback) {
             let is_swing_high = (i - lookback..i).all(|j| highs[j] <= highs[i])
                 && (i + 1..=i + lookback).all(|j| highs[j] <= highs[i]);
-            if is_swing_high { swing_highs.push((i, highs[i])); }
+            if is_swing_high {
+                swing_highs.push((i, highs[i]));
+            }
 
             let is_swing_low = (i - lookback..i).all(|j| lows[j] >= lows[i])
                 && (i + 1..=i + lookback).all(|j| lows[j] >= lows[i]);
-            if is_swing_low { swing_lows.push((i, lows[i])); }
+            if is_swing_low {
+                swing_lows.push((i, lows[i]));
+            }
         }
 
         if swing_highs.len() < 2 || swing_lows.len() < 2 {
@@ -1494,7 +2005,8 @@ impl TradingSkill for MarketStructureSkill {
                 direction: SignalDirection::Neutral,
                 strength: 0.3,
                 confidence: 0.5,
-                details: "Not enough swing points to determine market structure. Need more data.".to_string(),
+                details: "Not enough swing points to determine market structure. Need more data."
+                    .to_string(),
                 indicators: {
                     let mut m = HashMap::new();
                     m.insert("swing_highs_count".to_string(), swing_highs.len() as f64);
@@ -1506,21 +2018,45 @@ impl TradingSkill for MarketStructureSkill {
         }
 
         let latest_high = swing_highs.last().map(|(_, p)| *p).unwrap_or(0.0);
-        let prev_high = if swing_highs.len() >= 2 { swing_highs[swing_highs.len() - 2].1 } else { latest_high };
+        let prev_high = if swing_highs.len() >= 2 {
+            swing_highs[swing_highs.len() - 2].1
+        } else {
+            latest_high
+        };
         let latest_low = swing_lows.last().map(|(_, p)| *p).unwrap_or(0.0);
-        let prev_low = if swing_lows.len() >= 2 { swing_lows[swing_lows.len() - 2].1 } else { latest_low };
+        let prev_low = if swing_lows.len() >= 2 {
+            swing_lows[swing_lows.len() - 2].1
+        } else {
+            latest_low
+        };
 
         let price = context.current_price;
         let bos_bullish = price > prev_high; // Break of structure to the upside
-        let bos_bearish = price < prev_low;  // Break of structure to the downside
+        let bos_bearish = price < prev_low; // Break of structure to the downside
 
         // Higher highs + higher lows = uptrend
-        let higher_highs = if swing_highs.len() >= 2 { latest_high > prev_high } else { false };
-        let higher_lows = if swing_lows.len() >= 2 { latest_low > prev_low } else { false };
+        let higher_highs = if swing_highs.len() >= 2 {
+            latest_high > prev_high
+        } else {
+            false
+        };
+        let higher_lows = if swing_lows.len() >= 2 {
+            latest_low > prev_low
+        } else {
+            false
+        };
 
         // Lower highs + lower lows = downtrend
-        let lower_highs = if swing_highs.len() >= 2 { latest_high < prev_high } else { false };
-        let lower_lows = if swing_lows.len() >= 2 { latest_low < prev_low } else { false };
+        let lower_highs = if swing_highs.len() >= 2 {
+            latest_high < prev_high
+        } else {
+            false
+        };
+        let lower_lows = if swing_lows.len() >= 2 {
+            latest_low < prev_low
+        } else {
+            false
+        };
 
         let direction = if higher_highs && higher_lows {
             SignalDirection::Bullish // Strong uptrend
@@ -1549,8 +2085,14 @@ impl TradingSkill for MarketStructureSkill {
         indicators.insert("last_swing_low".to_string(), latest_low);
         indicators.insert("prev_swing_high".to_string(), prev_high);
         indicators.insert("prev_swing_low".to_string(), prev_low);
-        indicators.insert("bos_bullish".to_string(), if bos_bullish { 1.0 } else { 0.0 });
-        indicators.insert("bos_bearish".to_string(), if bos_bearish { 1.0 } else { 0.0 });
+        indicators.insert(
+            "bos_bullish".to_string(),
+            if bos_bullish { 1.0 } else { 0.0 },
+        );
+        indicators.insert(
+            "bos_bearish".to_string(),
+            if bos_bearish { 1.0 } else { 0.0 },
+        );
 
         Ok(SkillSignal {
             skill_id: self.id().to_string(),
@@ -1561,14 +2103,38 @@ impl TradingSkill for MarketStructureSkill {
             details: format!(
                 "Market Structure: Price ${:.2}. {} {} {} {}.",
                 price,
-                if higher_highs { "HH" } else if lower_highs { "LH" } else { "—" },
-                if higher_lows { "HL" } else if lower_lows { "LL" } else { "—" },
-                if bos_bullish { "★ BOS UP (bullish breakout)" } else if bos_bearish { "★ BOS DOWN (bearish breakout)" } else { "No BOS" },
-                if higher_highs && higher_lows { "★ UPTREND — higher highs + higher lows" }
-                else if lower_highs && lower_lows { "★ DOWNTREND — lower highs + lower lows" }
-                else if higher_highs { "Potential uptrend forming (higher highs)" }
-                else if lower_lows { "Potential downtrend forming (lower lows)" }
-                else { "Ranging — no clear structure" }
+                if higher_highs {
+                    "HH"
+                } else if lower_highs {
+                    "LH"
+                } else {
+                    "—"
+                },
+                if higher_lows {
+                    "HL"
+                } else if lower_lows {
+                    "LL"
+                } else {
+                    "—"
+                },
+                if bos_bullish {
+                    "★ BOS UP (bullish breakout)"
+                } else if bos_bearish {
+                    "★ BOS DOWN (bearish breakout)"
+                } else {
+                    "No BOS"
+                },
+                if higher_highs && higher_lows {
+                    "★ UPTREND — higher highs + higher lows"
+                } else if lower_highs && lower_lows {
+                    "★ DOWNTREND — lower highs + lower lows"
+                } else if higher_highs {
+                    "Potential uptrend forming (higher highs)"
+                } else if lower_lows {
+                    "Potential downtrend forming (lower lows)"
+                } else {
+                    "Ranging — no clear structure"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),
@@ -1586,35 +2152,62 @@ pub struct MarketCypherSkill {
 }
 
 impl Default for MarketCypherSkill {
-    fn default() -> Self { Self { short_period: 5, long_period: 40 } }
+    fn default() -> Self {
+        Self {
+            short_period: 5,
+            long_period: 40,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl TradingSkill for MarketCypherSkill {
-    fn id(&self) -> &'static str { "market_cypher" }
-    fn name(&self) -> &'static str { "Market Cypher (Momentum Regime)" }
-    fn description(&self) -> &'static str { "Multi-timeframe momentum analysis comparing short vs long-term velocity for regime detection" }
-    fn category(&self) -> SkillCategory { SkillCategory::TechnicalAnalysis }
+    fn id(&self) -> &'static str {
+        "market_cypher"
+    }
+    fn name(&self) -> &'static str {
+        "Market Cypher (Momentum Regime)"
+    }
+    fn description(&self) -> &'static str {
+        "Multi-timeframe momentum analysis comparing short vs long-term velocity for regime detection"
+    }
+    fn category(&self) -> SkillCategory {
+        SkillCategory::TechnicalAnalysis
+    }
 
     async fn analyze(&self, context: &MarketAnalysisContext) -> Result<SkillSignal, SkillError> {
         let closes = candles_to_closes(&context.candles);
         if closes.len() < self.long_period + 5 {
-            return Err(SkillError::InsufficientData(format!("Need {} candles for Market Cypher, got {}",
-                self.long_period + 5, closes.len())));
+            return Err(SkillError::InsufficientData(format!(
+                "Need {} candles for Market Cypher, got {}",
+                self.long_period + 5,
+                closes.len()
+            )));
         }
 
         let len = closes.len();
-        let short_ret = (closes[len - 1] - closes[len - 1 - self.short_period]) / closes[len - 1 - self.short_period].max(0.001);
-        let long_ret = (closes[len - 1] - closes[len - 1 - self.long_period]) / closes[len - 1 - self.long_period].max(0.001);
+        let short_ret = (closes[len - 1] - closes[len - 1 - self.short_period])
+            / closes[len - 1 - self.short_period].max(0.001);
+        let long_ret = (closes[len - 1] - closes[len - 1 - self.long_period])
+            / closes[len - 1 - self.long_period].max(0.001);
 
         // Momentum divergence: short-term vs long-term
-        let momentum_ratio = if long_ret != 0.0 { short_ret / long_ret } else { short_ret.signum() };
+        let momentum_ratio = if long_ret != 0.0 {
+            short_ret / long_ret
+        } else {
+            short_ret.signum()
+        };
 
         // Acceleration: comparing recent short-term returns to previous short-term returns
         let prev_short_ret = if len > self.short_period + 1 {
-            (closes[len - 1 - self.short_period] - closes[len - 1 - 2 * self.short_period].max(closes[0]))
-                / closes[len - 1 - 2 * self.short_period].max(closes[0]).max(0.001)
-        } else { short_ret };
+            (closes[len - 1 - self.short_period]
+                - closes[len - 1 - 2 * self.short_period].max(closes[0]))
+                / closes[len - 1 - 2 * self.short_period]
+                    .max(closes[0])
+                    .max(0.001)
+        } else {
+            short_ret
+        };
         let acceleration = short_ret - prev_short_ret;
 
         let direction = if short_ret > 0.0 && long_ret > 0.0 && acceleration > 0.0 {
@@ -1649,16 +2242,26 @@ impl TradingSkill for MarketCypherSkill {
             confidence: 0.65,
             details: format!(
                 "Market Cypher: Short-term({})={:.2}%, Long-term({})={:.2}%, Accel={:.2}%. {}",
-                self.short_period, short_ret * 100.0,
-                self.long_period, long_ret * 100.0,
+                self.short_period,
+                short_ret * 100.0,
+                self.long_period,
+                long_ret * 100.0,
                 acceleration * 100.0,
-                if short_ret > 0.0 && long_ret > 0.0 && acceleration > 0.0 { "★ ALL SYSTEMS GO — accelerating uptrend" }
-                else if short_ret < 0.0 && long_ret < 0.0 && acceleration < 0.0 { "★ BEARISH ACCELERATION — cascading downtrend" }
-                else if short_ret > 0.0 && long_ret < 0.0 { "Short-term recovery in long-term downtrend — cautious bullish" }
-                else if short_ret < 0.0 && long_ret > 0.0 { "Short-term pullback in long-term uptrend — dip buy zone?" }
-                else if short_ret > 0.0 { "Short-term bullish" }
-                else if short_ret < 0.0 { "Short-term bearish" }
-                else { "Flat momentum" }
+                if short_ret > 0.0 && long_ret > 0.0 && acceleration > 0.0 {
+                    "★ ALL SYSTEMS GO — accelerating uptrend"
+                } else if short_ret < 0.0 && long_ret < 0.0 && acceleration < 0.0 {
+                    "★ BEARISH ACCELERATION — cascading downtrend"
+                } else if short_ret > 0.0 && long_ret < 0.0 {
+                    "Short-term recovery in long-term downtrend — cautious bullish"
+                } else if short_ret < 0.0 && long_ret > 0.0 {
+                    "Short-term pullback in long-term uptrend — dip buy zone?"
+                } else if short_ret > 0.0 {
+                    "Short-term bullish"
+                } else if short_ret < 0.0 {
+                    "Short-term bearish"
+                } else {
+                    "Flat momentum"
+                }
             ),
             indicators,
             time_frame: "auto".to_string(),

@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
-use crate::redis_bridge::{RedisBridge, AgentBusMessage, Channels};
+use crate::redis_bridge::{AgentBusMessage, Channels, RedisBridge};
 
 /// Agent type
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -75,8 +75,8 @@ pub struct AgentRegistration {
     pub display_name: String,
     pub description: String,
     pub capabilities: Vec<AgentCapability>,
-    pub channels: Vec<String>,           // Pub/sub channels this agent listens to
-    pub weight: f64,                     // Importance/priority in ensemble
+    pub channels: Vec<String>, // Pub/sub channels this agent listens to
+    pub weight: f64,           // Importance/priority in ensemble
     pub status: AgentStatus,
     pub last_heartbeat: DateTime<Utc>,
     pub registered_at: DateTime<Utc>,
@@ -140,18 +140,22 @@ impl AgentRegistry {
         let msg = AgentBusMessage::broadcast(
             &self.local_agent_id,
             "agent_register",
-            serde_json::to_value(&registration)
-                .map_err(|e| format!("Serialize error: {}", e))?,
+            serde_json::to_value(&registration).map_err(|e| format!("Serialize error: {}", e))?,
         );
 
         self.bridge.publish(Channels::GLOBAL, &msg).await?;
 
         // Store in agent registry hash
-        let json = serde_json::to_string(&registration)
-            .map_err(|e| format!("Serialize error: {}", e))?;
-        self.bridge.set_state(&format!("agent:{}", agent_id), &json).await?;
+        let json =
+            serde_json::to_string(&registration).map_err(|e| format!("Serialize error: {}", e))?;
+        self.bridge
+            .set_state(&format!("agent:{}", agent_id), &json)
+            .await?;
 
-        info!("[AgentRegistry] Registered agent: {} ({})", registration.display_name, agent_id);
+        info!(
+            "[AgentRegistry] Registered agent: {} ({})",
+            registration.display_name, agent_id
+        );
         Ok(())
     }
 
@@ -173,41 +177,50 @@ impl AgentRegistry {
     }
 
     /// Send a message to a specific agent
-    pub async fn send_to(&self, target_agent: &str, msg_type: &str, payload: serde_json::Value) -> Result<u64, String> {
-        let msg = AgentBusMessage::new(
-            &self.local_agent_id,
-            target_agent,
-            msg_type,
-            payload,
-        );
+    pub async fn send_to(
+        &self,
+        target_agent: &str,
+        msg_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<u64, String> {
+        let msg = AgentBusMessage::new(&self.local_agent_id, target_agent, msg_type, payload);
 
         let channel = Channels::direct(target_agent);
         let count = self.bridge.publish(&channel, &msg).await?;
-        self.messages_routed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.messages_routed
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(count)
     }
 
     /// Broadcast a message to all agents
-    pub async fn broadcast(&self, msg_type: &str, payload: serde_json::Value) -> Result<u64, String> {
-        let msg = AgentBusMessage::broadcast(
-            &self.local_agent_id,
-            msg_type,
-            payload,
-        );
+    pub async fn broadcast(
+        &self,
+        msg_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<u64, String> {
+        let msg = AgentBusMessage::broadcast(&self.local_agent_id, msg_type, payload);
 
         let count = self.bridge.publish(Channels::GLOBAL, &msg).await?;
-        self.messages_routed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.messages_routed
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(count)
     }
 
     /// Send a message to all agents with a specific capability
-    pub async fn send_to_capability(&self, capability: &AgentCapability, msg_type: &str, payload: serde_json::Value) -> Result<u64, String> {
+    pub async fn send_to_capability(
+        &self,
+        capability: &AgentCapability,
+        msg_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<u64, String> {
         let agents = self.discover().await?;
         let mut total = 0;
 
         for agent in agents {
             if agent.capabilities.contains(capability) {
-                total += self.send_to(&agent.agent_id, msg_type, payload.clone()).await?;
+                total += self
+                    .send_to(&agent.agent_id, msg_type, payload.clone())
+                    .await?;
             }
         }
 
@@ -215,7 +228,13 @@ impl AgentRegistry {
     }
 
     /// Send trade signal to Python Nethra
-    pub async fn send_trade_signal(&self, symbol: &str, action: &str, conviction: f64, reasoning: &str) -> Result<(), String> {
+    pub async fn send_trade_signal(
+        &self,
+        symbol: &str,
+        action: &str,
+        conviction: f64,
+        reasoning: &str,
+    ) -> Result<(), String> {
         let payload = serde_json::json!({
             "symbol": symbol,
             "action": action,
@@ -226,19 +245,22 @@ impl AgentRegistry {
         });
 
         // Send to Python Nethra directly
-        self.send_to("python_nethra", "trade_signal", payload.clone()).await?;
+        self.send_to("python_nethra", "trade_signal", payload.clone())
+            .await?;
 
         // Also publish to trade signals channel
         let msg = AgentBusMessage::broadcast("rust_tredo", "trade_signal", payload);
         self.bridge.publish(Channels::TRADE_SIGNALS, &msg).await?;
 
-        self.messages_routed.fetch_add(3, std::sync::atomic::Ordering::Relaxed);
+        self.messages_routed
+            .fetch_add(3, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
     /// Send analysis result to Python Nethra (takes a generic JSON-serializable value)
     pub async fn send_analysis(&self, analysis: &serde_json::Value) -> Result<(), String> {
-        self.send_to("python_nethra", "analysis_result", analysis.clone()).await?;
+        self.send_to("python_nethra", "analysis_result", analysis.clone())
+            .await?;
         Ok(())
     }
 
@@ -248,20 +270,25 @@ impl AgentRegistry {
         let local_id = self.local_agent_id.clone();
         let agents = self.agents.clone();
 
-        self.bridge.subscribe(&channel, move |msg: AgentBusMessage| {
-            let agents = agents.clone();
-            let local_id = local_id.clone();
-            async move {
-                // Only process messages not from self
-                if msg.source != local_id {
-                    if let Ok(mut agents) = agents.try_lock() {
-                        if let Some(agent) = agents.get_mut(&msg.source) {
-                            info!("[AgentRegistry] Message from {}: {}", agent.display_name, msg.msg_type);
+        self.bridge
+            .subscribe(&channel, move |msg: AgentBusMessage| {
+                let agents = agents.clone();
+                let local_id = local_id.clone();
+                async move {
+                    // Only process messages not from self
+                    if msg.source != local_id {
+                        if let Ok(mut agents) = agents.try_lock() {
+                            if let Some(agent) = agents.get_mut(&msg.source) {
+                                info!(
+                                    "[AgentRegistry] Message from {}: {}",
+                                    agent.display_name, msg.msg_type
+                                );
+                            }
                         }
                     }
                 }
-            }
-        }).await
+            })
+            .await
     }
 
     /// Subscribe to the global channel
@@ -269,22 +296,26 @@ impl AgentRegistry {
         let agents = self.agents.clone();
         let local_id = self.local_agent_id.clone();
 
-        self.bridge.subscribe(Channels::GLOBAL, move |msg: AgentBusMessage| {
-            let agents = agents.clone();
-            let local_id = local_id.clone();
-            async move {
-                if msg.source != local_id {
-                    // Auto-register new agents discovered via broadcast
-                    if msg.msg_type == "agent_register" {
-                        if let Ok(reg) = serde_json::from_value::<AgentRegistration>(msg.payload) {
-                            if let Ok(mut a) = agents.try_lock() {
-                                a.insert(reg.agent_id.clone(), reg);
+        self.bridge
+            .subscribe(Channels::GLOBAL, move |msg: AgentBusMessage| {
+                let agents = agents.clone();
+                let local_id = local_id.clone();
+                async move {
+                    if msg.source != local_id {
+                        // Auto-register new agents discovered via broadcast
+                        if msg.msg_type == "agent_register" {
+                            if let Ok(reg) =
+                                serde_json::from_value::<AgentRegistration>(msg.payload)
+                            {
+                                if let Ok(mut a) = agents.try_lock() {
+                                    a.insert(reg.agent_id.clone(), reg);
+                                }
                             }
                         }
                     }
                 }
-            }
-        }).await
+            })
+            .await
     }
 
     /// Get registry statistics
@@ -292,14 +323,29 @@ impl AgentRegistry {
         let agents = self.agents.lock().await;
         RegistryStats {
             total_agents: agents.len(),
-            active_agents: agents.values().filter(|a| a.status == AgentStatus::Active).count(),
-            python_agents: agents.values().filter(|a| a.agent_type == AgentType::PythonNethra).count(),
-            rust_agents: agents.values().filter(|a| a.agent_type == AgentType::RustTREDO).count(),
-            python_subagents: agents.values().filter(|a| matches!(a.agent_type, AgentType::PythonSubAgent(_))).count(),
-            rust_subagents: agents.values().filter(|a| matches!(a.agent_type, AgentType::RustSubAgent(_))).count(),
-            messages_routed: self.messages_routed.load(std::sync::atomic::Ordering::Relaxed),
+            active_agents: agents
+                .values()
+                .filter(|a| a.status == AgentStatus::Active)
+                .count(),
+            python_agents: agents
+                .values()
+                .filter(|a| a.agent_type == AgentType::PythonNethra)
+                .count(),
+            rust_agents: agents
+                .values()
+                .filter(|a| a.agent_type == AgentType::RustTREDO)
+                .count(),
+            python_subagents: agents
+                .values()
+                .filter(|a| matches!(a.agent_type, AgentType::PythonSubAgent(_)))
+                .count(),
+            rust_subagents: agents
+                .values()
+                .filter(|a| matches!(a.agent_type, AgentType::RustSubAgent(_)))
+                .count(),
+            messages_routed: self
+                .messages_routed
+                .load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 }
-
-

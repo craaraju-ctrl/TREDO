@@ -1,11 +1,10 @@
-use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Serialize;
+use std::sync::Arc;
 
 use tredo_core::{
-    AgentProvider, LLMProvider,
-    MarketAnalysisContext, AggregatedAnalysis, SignalDirection,
-    ProviderError, LearningFeedback,
+    AgentProvider, AggregatedAnalysis, LLMProvider, LearningFeedback, MarketAnalysisContext,
+    ProviderError, SignalDirection,
 };
 
 use crate::bot::SwarmBotResult;
@@ -42,11 +41,7 @@ impl SwarmCoordinator {
     /// - `llm`: The LLM for strategic reasoning (e.g., GeminiLLM)
     /// - `swarm`: The bot swarm to coordinate
     /// - `registry_name`: Optional name for runtime provider discovery
-    pub fn new(
-        agent: Arc<dyn AgentProvider>,
-        llm: Arc<dyn LLMProvider>,
-        swarm: BotSwarm,
-    ) -> Self {
+    pub fn new(agent: Arc<dyn AgentProvider>, llm: Arc<dyn LLMProvider>, swarm: BotSwarm) -> Self {
         let system_prompt = format!(
             "You are Nethra, the central decision-maker and Master Coordinator for an AI trading swarm. \
              You command {} specialized bots. Your role:\n\
@@ -101,27 +96,33 @@ impl SwarmCoordinator {
         let bot_results = self.swarm.run_all(context).await;
 
         // Step 2: Run primary agent analysis (the core decision maker)
-        let primary_analysis = self.agent.analyze_market(context).await.unwrap_or_else(|e| {
-            eprintln!("[SwarmCoordinator] Primary agent error: {:?}", e);
-            AggregatedAnalysis {
-                symbol: context.symbol.clone(),
-                current_price: context.current_price,
-                signals: vec![],
-                overall_conviction: 0.0,
-                overall_direction: SignalDirection::Neutral,
-                bullish_signals: 0,
-                bearish_signals: 0,
-                neutral_signals: 0,
-                timestamp: chrono::Utc::now(),
-            }
-        });
+        let primary_analysis = self
+            .agent
+            .analyze_market(context)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("[SwarmCoordinator] Primary agent error: {:?}", e);
+                AggregatedAnalysis {
+                    symbol: context.symbol.clone(),
+                    current_price: context.current_price,
+                    signals: vec![],
+                    overall_conviction: 0.0,
+                    overall_direction: SignalDirection::Neutral,
+                    bullish_signals: 0,
+                    bearish_signals: 0,
+                    neutral_signals: 0,
+                    timestamp: chrono::Utc::now(),
+                }
+            });
 
         // Step 3: Build swarm analysis from already-computed bot results
         //         (avoids double execution — swarm.analyze() would call run_all() again)
         let swarm_analysis = self.build_swarm_analysis_from_results(context, &bot_results);
 
         // Step 4: Use the LLM to produce final strategic reasoning
-        let final_reasoning = self.reason_strategic(&primary_analysis, &swarm_analysis, &bot_results).await;
+        let final_reasoning = self
+            .reason_strategic(&primary_analysis, &swarm_analysis, &bot_results)
+            .await;
 
         // Step 5: Determine final decision
         let decision = self.final_decision(&primary_analysis, &swarm_analysis);
@@ -154,7 +155,10 @@ impl SwarmCoordinator {
         let mut total_neutral = 0u32;
 
         for result in results {
-            let weight = self.swarm.bots().iter()
+            let weight = self
+                .swarm
+                .bots()
+                .iter()
                 .find(|b| b.id == result.bot_id)
                 .map(|b| b.weight)
                 .unwrap_or(0.25);
@@ -208,7 +212,10 @@ impl SwarmCoordinator {
             .map(|r| {
                 format!(
                     "[{}] Conviction: {:.2} ({:?}) | Reasoning: {}",
-                    r.bot_name, r.analysis.overall_conviction, r.analysis.overall_direction, r.llm_reasoning
+                    r.bot_name,
+                    r.analysis.overall_conviction,
+                    r.analysis.overall_direction,
+                    r.llm_reasoning
                 )
             })
             .collect();
@@ -239,16 +246,23 @@ impl SwarmCoordinator {
             bot_summaries.join("\n"),
         );
 
-        match self.llm.complete(&prompt, Some(&self.system_prompt), None).await {
+        match self
+            .llm
+            .complete(&prompt, Some(&self.system_prompt), None)
+            .await
+        {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("[SwarmCoordinator] LLM reasoning error: {:?}", e);
                 format!(
                     "Primary conviction {:.2} ({:?}), swarm consensus {:.2} ({:?}). \
                      {} bullish, {} bearish signals across {} bots.",
-                    primary.overall_conviction, primary.overall_direction,
-                    swarm.overall_conviction, swarm.overall_direction,
-                    primary.bullish_signals, primary.bearish_signals,
+                    primary.overall_conviction,
+                    primary.overall_direction,
+                    swarm.overall_conviction,
+                    swarm.overall_direction,
+                    primary.bullish_signals,
+                    primary.bearish_signals,
                     swarm.bot_results.len()
                 )
             }
@@ -411,10 +425,7 @@ impl AgentProvider for SwarmAgentProvider {
                     "role".to_string(),
                     serde_json::Value::String(info.role.label().to_string()),
                 );
-                map.insert(
-                    "weight".to_string(),
-                    serde_json::json!(info.weight),
-                );
+                map.insert("weight".to_string(), serde_json::json!(info.weight));
                 map
             })
             .collect()

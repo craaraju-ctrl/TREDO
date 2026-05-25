@@ -1,7 +1,7 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use borsh::{BorshSerialize, BorshDeserialize};
 
 // ── Wire Contract Types ────────────────────────────────────────────────────
 
@@ -20,7 +20,9 @@ pub struct OrderBookSnapshot {
 
 // ── Trade Types ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+)]
 pub enum DecisionStatus {
     Approved,
     Rejected,
@@ -207,36 +209,55 @@ impl RiskEngine {
     }
 
     /// Calculate Kelly-optimal position size
-    pub fn kelly_position_size(&self, win_rate: f64, avg_win: f64, avg_loss: f64, portfolio_value: f64) -> f64 {
+    pub fn kelly_position_size(
+        &self,
+        win_rate: f64,
+        avg_win: f64,
+        avg_loss: f64,
+        portfolio_value: f64,
+    ) -> f64 {
         if avg_loss == 0.0 {
             return 0.0;
         }
         let b = avg_win / avg_loss.abs(); // Win/loss ratio
         let p = win_rate / 100.0;
         let q = 1.0 - p;
-        
+
         // Kelly formula: f* = (bp - q) / b
         let kelly = (b * p - q) / b;
-        
+
         // Use fractional Kelly (25%) for safety
         let position_pct = kelly.clamp(0.0, 0.25) * 0.25;
-        
+
         position_pct * portfolio_value
     }
 
     /// Calculate trailing stop price
-    pub fn trailing_stop_price(entry_price: f64, current_price: f64, stop_pct: f64, side: &str) -> Option<f64> {
+    pub fn trailing_stop_price(
+        entry_price: f64,
+        current_price: f64,
+        stop_pct: f64,
+        side: &str,
+    ) -> Option<f64> {
         let stop_distance = entry_price * (stop_pct / 100.0);
         match side {
             "BUY" => {
                 let highest = current_price.max(entry_price);
                 let stop = highest - stop_distance;
-                if current_price <= stop { Some(stop) } else { None }
+                if current_price <= stop {
+                    Some(stop)
+                } else {
+                    None
+                }
             }
             "SELL" => {
                 let lowest = current_price.min(entry_price);
                 let stop = lowest + stop_distance;
-                if current_price >= stop { Some(stop) } else { None }
+                if current_price >= stop {
+                    Some(stop)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -248,10 +269,10 @@ impl RiskEngine {
         // (they're highly correlated)
         let is_crypto = |s: &str| s.contains("BTC") || s.contains("ETH") || s.contains("SOL");
         let is_stock = |s: &str| !s.contains('-') || s.starts_with("XAU");
-        
+
         let new_is_crypto = is_crypto(new_symbol);
         let _new_is_stock = is_stock(new_symbol);
-        
+
         for pos in existing_positions {
             if new_is_crypto && is_crypto(pos) {
                 // Both crypto — check if same exchange pair
@@ -279,10 +300,7 @@ impl RiskEngine {
         }
 
         if state.consecutive_losses >= self.max_consecutive_losses {
-            return Some(format!(
-                "{} consecutive losses",
-                state.consecutive_losses
-            ));
+            return Some(format!("{} consecutive losses", state.consecutive_losses));
         }
 
         None
@@ -290,14 +308,19 @@ impl RiskEngine {
 }
 
 impl Default for RiskEngine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub struct ExchangeClient;
 
 impl ExchangeClient {
     pub async fn place_order(&self, decision: &TradeDecision) -> Result<(), String> {
-        println!("[ExchangeClient] Placing order: {} {} @ {}", decision.action, decision.symbol, decision.price);
+        println!(
+            "[ExchangeClient] Placing order: {} {} @ {}",
+            decision.action, decision.symbol, decision.price
+        );
         Ok(())
     }
 }
@@ -305,7 +328,9 @@ impl ExchangeClient {
 pub struct ExchangeRouter;
 
 impl ExchangeRouter {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub fn route_sync(&self, _decision: &TradeDecision, _data: &MarketData) -> ExchangeClient {
         ExchangeClient
@@ -313,5 +338,7 @@ impl ExchangeRouter {
 }
 
 impl Default for ExchangeRouter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

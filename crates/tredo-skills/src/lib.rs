@@ -1,15 +1,15 @@
-pub mod technical;
-pub mod risk;
-pub mod portfolio;
 pub mod advanced_technical;
-pub mod sub_agents;
+pub mod portfolio;
+pub mod risk;
 pub mod skilled_agent;
+pub mod sub_agents;
+pub mod technical;
 pub use skilled_agent::SkilledAgent;
 
 // ── Re-export shared types from tredo-core ────────────────────────────────
 pub use tredo_core::{
-    MarketAnalysisContext, Candle, SignalDirection, SkillSignal, AggregatedAnalysis,
-    PortfolioSnapshot, SkillError, SkillCategory, ProviderError, LearningFeedback,
+    AggregatedAnalysis, Candle, LearningFeedback, MarketAnalysisContext, PortfolioSnapshot,
+    ProviderError, SignalDirection, SkillCategory, SkillError, SkillSignal,
 };
 
 use serde::Serialize;
@@ -85,7 +85,10 @@ impl NethraAgent {
     }
 
     /// Run the orchestrator (sub-agents in parallel) for advanced analysis
-    pub async fn orchestrate(&self, context: &MarketAnalysisContext) -> sub_agents::OrchestratedResult {
+    pub async fn orchestrate(
+        &self,
+        context: &MarketAnalysisContext,
+    ) -> sub_agents::OrchestratedResult {
         let orchestrator = self.orchestrator.lock().await;
         orchestrator.orchestrate(context).await
     }
@@ -97,7 +100,11 @@ impl NethraAgent {
     }
 
     pub fn skills_by_category(&self, category: SkillCategory) -> Vec<&dyn TradingSkill> {
-        self.skills.iter().map(Box::as_ref).filter(|s| s.category() == category).collect()
+        self.skills
+            .iter()
+            .map(Box::as_ref)
+            .filter(|s| s.category() == category)
+            .collect()
     }
 
     /// Run all applicable skills and produce an aggregated analysis
@@ -162,7 +169,10 @@ impl NethraAgent {
     }
 
     pub fn skill_names(&self) -> Vec<String> {
-        self.skills.iter().map(|s| format!("{} ({})", s.name(), s.category())).collect()
+        self.skills
+            .iter()
+            .map(|s| format!("{} ({})", s.name(), s.category()))
+            .collect()
     }
 
     /// Get info about all sub-agents

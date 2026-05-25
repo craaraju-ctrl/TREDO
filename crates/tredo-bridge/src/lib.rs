@@ -30,17 +30,17 @@
 //!   └────────────┴────────────┴────────────┘
 //! ```
 
-pub mod redis_bridge;
-pub mod rag;
-pub mod memory;
 pub mod agent_registry;
 pub mod cache;
+pub mod memory;
 pub mod nethra_bridge_agent;
+pub mod rag;
+pub mod redis_bridge;
 
 // Re-exports for convenience
-pub use redis_bridge::*;
-pub use rag::*;
-pub use memory::*;
 pub use agent_registry::*;
 pub use cache::*;
+pub use memory::*;
 pub use nethra_bridge_agent::*;
+pub use rag::*;
+pub use redis_bridge::*;
