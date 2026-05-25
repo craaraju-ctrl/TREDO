@@ -1,0 +1,12 @@
+[package]
+name = "tredo-execution"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tredo-types = { path = "../tredo-types" }
+tredo-exchange = { path = "../tredo-exchange" }

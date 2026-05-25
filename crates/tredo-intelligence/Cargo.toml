@@ -1,0 +1,17 @@
+[package]
+name = "tredo-intelligence"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+chrono = { workspace = true }
+tredo-core = { path = "../tredo-core" }
+tredo-bridge = { path = "../tredo-bridge" }
+tredo-skills = { path = "../tredo-skills" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+futures = "0.3"
+async-stream = "0.3"
+async-trait = { workspace = true }

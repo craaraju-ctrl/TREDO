@@ -270,40 +270,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "arkm-bin"
+name = "tredo-bin"
 version = "1.0.0"
 dependencies = [
- "arkm-server",
+ "tredo-server",
  "tokio",
 ]
 
 [[package]]
-name = "arkm-core"
+name = "tredo-core"
 version = "1.0.0"
 dependencies = [
- "arkm-types",
+ "tredo-types",
  "serde",
 ]
 
 [[package]]
-name = "arkm-exchange"
+name = "tredo-exchange"
 version = "1.0.0"
 dependencies = [
- "arkm-types",
+ "tredo-types",
  "serde",
 ]
 
 [[package]]
-name = "arkm-execution"
+name = "tredo-execution"
 version = "1.0.0"
 dependencies = [
  "actix",
- "arkm-core",
- "arkm-types",
+ "tredo-core",
+ "tredo-types",
 ]
 
 [[package]]
-name = "arkm-intelligence"
+name = "tredo-intelligence"
 version = "1.0.0"
 dependencies = [
  "serde",
@@ -311,31 +311,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkm-server"
+name = "tredo-server"
 version = "1.0.0"
 dependencies = [
  "actix",
  "actix-web",
- "arkm-core",
- "arkm-exchange",
- "arkm-execution",
- "arkm-intelligence",
- "arkm-tantra",
- "arkm-types",
+ "tredo-core",
+ "tredo-exchange",
+ "tredo-execution",
+ "tredo-intelligence",
+ "tredo-tantra",
+ "tredo-types",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "arkm-tantra"
+name = "tredo-tantra"
 version = "1.0.0"
 dependencies = [
- "arkm-types",
+ "tredo-types",
  "serde",
 ]
 
 [[package]]
-name = "arkm-types"
+name = "tredo-types"
 version = "1.0.0"
 dependencies = [
  "borsh",

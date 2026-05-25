@@ -10,19 +10,23 @@ use tower_http::cors::{CorsLayer, Any};
 use tokio::sync::mpsc;
 use serde_json::json;
 use futures::{stream::StreamExt, sink::SinkExt};
-use arkm_types::{ExecutionCommand, ManualOverrideRequest};
-use arkm_skills::{MarketAnalysisContext, Candle};
+use tredo_types::{ExecutionCommand, ManualOverrideRequest};
+use tredo_skills::{MarketAnalysisContext, Candle};
 
 use std::sync::Arc;
-use arkm_intelligence::IntelligencePool;
-use arkm_tantra::TantraService;
-use arkm_core::PluginRegistry;
-use arkm_data::{YahooFinanceProvider, MarketDataProvider, TimeFrame};
-use arkm_journal::TradeJournal;
-use arkm_autotrader::{AutoTradingLoop, AutoTradingConfig};
-use arkm_learning::LearningEngine;
-use arkm_stream::{StreamRegistry, StreamMessage};
-use arkm_bridge::{
+use tredo_intelligence::IntelligencePool;
+use tredo_mcp::{ArkMcpServerWithResources, McpState};
+use rmcp::transport::streamable_http_server::{
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+};
+use tredo_tantra::TantraService;
+use tredo_core::PluginRegistry;
+use tredo_data::{YahooFinanceProvider, MarketDataProvider, TimeFrame};
+use tredo_journal::TradeJournal;
+use tredo_autotrader::{AutoTradingLoop, AutoTradingConfig};
+use tredo_learning::LearningEngine;
+use tredo_stream::{StreamRegistry, StreamMessage};
+use tredo_bridge::{
     RedisBridge, AgentRegistry,
     TieredCache, HierarchicalRAG, SharedMemory,
 };
@@ -46,6 +50,8 @@ pub struct AppState {
     pub shared_memory: Arc<SharedMemory>,
     // Plugin Registry (DI container for providers)
     pub registry: Arc<dyn PluginRegistry>,
+    // MCP Server state
+    pub mcp_state: McpState,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -106,6 +112,22 @@ pub fn router(state: AppState) -> Router {
         .route("/api/providers/llms", get(providers_llms))
         .route("/api/providers/swap-agent", post(providers_swap_agent))
         .route("/api/providers/swap-llm", post(providers_swap_llm))
+        // MCP (Model Context Protocol) — Streamable HTTP (SSE) Transport
+        // Handles GET (SSE stream), POST (JSON-RPC messages), DELETE (session cleanup)
+        .nest_service("/api/mcp", {
+            let mcp_state = state.mcp_state.clone();
+            let mcp_server = ArkMcpServerWithResources::new(mcp_state);
+            let mcp_service_factory = move || -> Result<ArkMcpServerWithResources, std::io::Error> {
+                Ok(mcp_server.clone())
+            };
+            StreamableHttpService::<ArkMcpServerWithResources, LocalSessionManager>::new(
+                mcp_service_factory,
+                std::sync::Arc::new(LocalSessionManager::default()),
+                StreamableHttpServerConfig::default()
+                    .with_allowed_hosts(["localhost", "127.0.0.1", "::1", "0.0.0.0"])
+                    .with_sse_keep_alive(None),
+            )
+        })
         // WebSocket
         .route("/ws", get(ws_handler))
         .with_state(state)
@@ -116,7 +138,7 @@ pub fn router(state: AppState) -> Router {
 async fn health_check() -> impl IntoResponse {
     Json(json!({
         "status": "operational",
-        "engine": "ARKM Axum Core v2",
+        "engine": "TREDO Axum Core v2",
         "features": {
             "websocket_streaming": true,
             "self_learning": true,
@@ -294,6 +316,7 @@ async fn google_trading_webhook(
         portfolio_value: 100000.0,
         exposure: 0.0,
         open_positions: std::collections::HashMap::new(),
+        local_skills: None,
     };
     let technical_analysis = state.intelligence.analyze_with_skills(context).await;
 
@@ -315,15 +338,73 @@ async fn google_trading_webhook(
         state.tantra.is_dnd_active()
     };
 
-    // 5. Build prompt explaining scenarios to Gemini for confirmation
+    // 5. Previous session crosscheck — query the trade journal for recent decisions
+    //    on the same symbol to learn from past performance
+    let mut previous_decisions = Vec::new();
+    let mut previous_outcomes = Vec::new();
+    {
+        let journal = state.journal.lock().await;
+        if let Ok(decisions) = journal.get_recent_decisions(50) {
+            // Filter for same symbol within the last 24 hours
+            let now = chrono::Utc::now();
+            let one_day_ago = now - chrono::Duration::hours(24);
+            for d in &decisions {
+                if d.symbol == payload.symbol && d.timestamp > one_day_ago {
+                    previous_decisions.push(format!(
+                        "[{}] Action: {} | Direction: {} | Conviction: {:.0}% | Regime: {} | Reason: {}",
+                        d.timestamp.format("%H:%M:%S UTC"),
+                        d.action_taken,
+                        d.overall_direction,
+                        d.overall_conviction * 100.0,
+                        d.market_regime,
+                        d.reason
+                    ));
+                }
+            }
+        }
+        // Also get recent trade outcomes for this symbol
+        if let Ok(trades) = journal.get_trade_history(20, 0) {
+            let mut total_closed_pnl = 0.0;
+            let mut closed_count = 0;
+            let mut wins = 0;
+            for t in trades.iter().filter(|t| t.symbol == payload.symbol) {
+                if let Some(pnl) = t.pnl {
+                    total_closed_pnl += pnl;
+                    closed_count += 1;
+                    if pnl > 0.0 { wins += 1; }
+                }
+            }
+            if closed_count > 0 {
+                let win_rate = (wins as f64 / closed_count as f64) * 100.0;
+                previous_outcomes.push(format!(
+                    "Recent trades for {}: {} closed | Win rate: {:.0}% | Total P&L: ${:.2}",
+                    payload.symbol, closed_count, win_rate, total_closed_pnl
+                ));
+            }
+        }
+    }
+
+    let previous_session_summary = if previous_decisions.is_empty() {
+        "No previous decisions found for this symbol in the last 24 hours.".to_string()
+    } else {
+        previous_decisions.join("\n             ")
+    };
+
+    let previous_trade_summary = if previous_outcomes.is_empty() {
+        String::new()
+    } else {
+        format!("\n         TRADE OUTCOME HISTORY:\n             {}", previous_outcomes.join("\n             "))
+    };
+
+    // 6. Build prompt explaining scenarios to Gemini for confirmation
     let prompt = format!(
-        "You are Hermes, the autonomous trading coordinator. Review this incoming cTrading call:\n\n\
+        "You are Nethra, the autonomous trading coordinator. Review this incoming cTrading call:\n\n\
          INCOMING TRADE CALL:\n\
          - Symbol: {}\n\
          - Side/Action: {}\n\
          - Size/Amount: {}\n\
          - Price: {}\n\n\
-         HERMES GATHERED CROSSCHECKS:\n\
+         NETHRA GATHERED CROSSCHECKS:\n\
          1. CHART & TECHNICALS:\n\
          - Sentiment: {:?}\n\
          - Technical Conviction: {:.0}%\n\
@@ -333,41 +414,54 @@ async fn google_trading_webhook(
          3. CALENDAR LOCKS & SAFETY CONTROLLER:\n\
          - Scheduled Events: {:?}\n\
          - Active Safety DND Mode: {}\n\n\
+         4. PREVIOUS SESSION CROSSCHECKS (last 24h):\n\
+         - Previous Decisions: {}{}\n\n\
          DECISION POLICY:\n\
-         If DND Mode is active, or if calendar event status indicates risk, or technical conviction is very low (< 0.2), prioritize REJECTING the trade. Otherwise, check if technical indicator direction matches the trade call action (BUY/SELL).\n\n\
+         - If DND Mode is active, or if calendar event status indicates risk, or technical conviction is very low (< 0.2), prioritize REJECTING the trade.\n\
+         - If previous decisions on the same symbol were mostly REJECTED or resulted in losses, be more cautious.\n\
+         - If previous decisions on the same symbol were Approved and profitable, consider the context before approving.\n\
+         - Check if technical indicator direction matches the trade call action (BUY/SELL).\n\
+         - Consider momentum — if the same symbol was recently traded successfully, factor that into your confidence.\n\n\
          You MUST respond in strict JSON format: \n\
          {{ \"status\": \"Approved\" | \"Rejected\", \"conviction\": 0.0 to 1.0, \"reasoning\": \"Your concise explanation\" }}",
         payload.symbol, payload.action, payload.amount, current_price,
         technical_analysis.overall_direction, technical_analysis.overall_conviction * 100.0,
         technical_analysis.bullish_signals, technical_analysis.bearish_signals, technical_analysis.neutral_signals,
-        active_news, active_events, dnd_active
+        active_news, active_events, dnd_active,
+        previous_session_summary, previous_trade_summary
     );
 
-    // 6. Explain scenarios to Gemini LLM for confirmation
-    let (status, conviction, reasoning) = match state.intelligence.query_analyst(&prompt).await {
-        Ok(reply) => {
-            println!("[GoogleTradingWebhook] Gemini confirmation reply: {}", reply);
-            if let Ok(parsed) = serde_json::from_str::<GeminiConfirmationResponse>(&reply) {
-                (parsed.status, parsed.conviction, parsed.reasoning)
-            } else {
-                if reply.contains("Approved") || reply.contains("APPROVED") {
-                    ("Approved".to_string(), 0.75, "Auto-approved via confirmation fallback parsing".to_string())
+    // 7. Explain scenarios to Gemini LLM for confirmation
+    let gemini_llm = state.registry.get_llm("gemini");
+    let (status, conviction, reasoning) = if let Some(gemini) = gemini_llm {
+        match gemini.complete(&prompt, Some("HFT analyst. Reply JSON only."), None).await {
+            Ok(reply) => {
+                println!("[GoogleTradingWebhook] Gemini confirmation reply: {}", reply);
+                if let Ok(parsed) = serde_json::from_str::<GeminiConfirmationResponse>(&reply) {
+                    (parsed.status, parsed.conviction, parsed.reasoning)
                 } else {
-                    ("Rejected".to_string(), 0.1, "Rejected due to confirmation fallback failure".to_string())
+                    if reply.contains("Approved") || reply.contains("APPROVED") {
+                        ("Approved".to_string(), 0.75, "Auto-approved via confirmation fallback parsing".to_string())
+                    } else {
+                        ("Rejected".to_string(), 0.1, "Rejected due to confirmation fallback failure".to_string())
+                    }
                 }
             }
+            Err(e) => {
+                eprintln!("[GoogleTradingWebhook] Gemini query failed: {}", e);
+                ("Rejected".to_string(), 0.0, "Gemini confirmation API call failed".to_string())
+            }
         }
-        Err(e) => {
-            eprintln!("[GoogleTradingWebhook] Gemini query failed: {}", e);
-            ("Rejected".to_string(), 0.0, "Gemini confirmation API call timed out".to_string())
-        }
+    } else {
+        eprintln!("[GoogleTradingWebhook] Gemini LLM provider not registered in plugin registry");
+        ("Rejected".to_string(), 0.0, "Gemini confirmation LLM provider not found".to_string())
     };
 
     let approved = status == "Approved" || status == "APPROVED";
 
-    // 7. Persistent logging in SQLite Trade Journal
+    // 8. Persistent logging in SQLite Trade Journal
     let action_side = if payload.action.to_uppercase() == "BUY" { "BUY" } else { "SELL" };
-    let decision_rec = arkm_journal::DecisionRecord {
+    let decision_rec = tredo_journal::DecisionRecord {
         id: uuid::Uuid::new_v4().to_string(),
         symbol: payload.symbol.clone(),
         timestamp: chrono::Utc::now(),
@@ -383,7 +477,7 @@ async fn google_trading_webhook(
     let _ = state.journal.lock().await.record_decision(&decision_rec);
 
     if approved {
-        let decision = arkm_types::TradeDecision {
+        let decision = tredo_types::TradeDecision {
             id: uuid::Uuid::new_v4(),
             symbol: payload.symbol.clone(),
             action: action_side.to_string(),
@@ -391,7 +485,7 @@ async fn google_trading_webhook(
             price: current_price,
             conviction,
             reasoning: format!("[Google cTrading Call Verified] {}", reasoning),
-            status: arkm_types::DecisionStatus::Approved,
+            status: tredo_types::DecisionStatus::Approved,
             timestamp: chrono::Utc::now(),
         };
 
@@ -404,7 +498,7 @@ async fn google_trading_webhook(
 
         Json(json!({
             "status": "Approved",
-            "message": "Google cTrading call verified by Hermes and automatically executed.",
+            "message": "Google cTrading call verified by Nethra and automatically executed.",
             "conviction": conviction,
             "reasoning": reasoning,
             "trade": {
@@ -422,7 +516,7 @@ async fn google_trading_webhook(
 
         Json(json!({
             "status": "Rejected",
-            "message": "Google cTrading call was rejected by Hermes / Gemini safety review.",
+            "message": "Google cTrading call was rejected by Nethra / Gemini safety review.",
             "conviction": conviction,
             "reasoning": reasoning
         }))
@@ -494,6 +588,7 @@ async fn skills_analyze(
         portfolio_value: payload.portfolio_value.unwrap_or(100000.0),
         exposure: 0.0,
         open_positions: std::collections::HashMap::new(),
+        local_skills: None,
     };
 
     // Run both flat analysis and orchestrated sub-agent analysis
@@ -1026,7 +1121,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     // Send initial connection confirmation
     let welcome = serde_json::to_string(&StreamMessage::Alert {
         severity: "success".to_string(),
-        message: "Connected to ARKM v2 streaming hub. Sub-agents: TechnicalAnalyst, RiskManager, PortfolioManager, MarketDataAgent".to_string(),
+        message: "Connected to TREDO local intelligence hub. Active Agent: Nethra (Rust built-in agent with 30+ native technical, risk, and portfolio skills). LLM: Ollama (nemetron:4b)".to_string(),
         timestamp: chrono::Utc::now(),
     }).unwrap_or_default();
 

@@ -1,0 +1,9 @@
+[package]
+name = "tredo-tantra"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tredo-types = { path = "../tredo-types" }
+dashmap = { workspace = true }
+serde = { workspace = true }

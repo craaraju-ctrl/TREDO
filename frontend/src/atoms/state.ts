@@ -1,26 +1,91 @@
 import { atom } from 'jotai';
 import { OrderBook, Trade, TantraAlert } from '../../../protocols/ts';
 
+export type { TantraAlert };
+
 // Navigation active module tab
 export type ActiveModule = 'Chat' | 'Tredo' | 'Tantra' | 'Journal' | 'Settings';
-export const activeModuleAtom = atom<ActiveModule>('Chat');
+export const activeModuleAtom = atom<ActiveModule>(loadSettings<ActiveModule>('active_module', 'Chat'));
 
 // --- CHAT STATE ---
 export interface ChatMessage {
-  sender: 'Operator' | 'Hermes' | 'System';
+  sender: 'Operator' | 'Nethra' | 'System';
   text: string;
   timestamp: number;
 }
 export const chatMessagesAtom = atom<ChatMessage[]>([
   {
-    sender: 'Hermes',
+    sender: 'Nethra',
     text: 'Greetings, Operator. Sethu bridge is online. Chat, Tredo, and Tantra modules are operational.',
     timestamp: Date.now(),
   }
 ]);
 export const chatInputAtom = atom<string>('');
-export const selectedModelAtom = atom<string>('qwen3.5:0.8b');
-export const selectedAgentAtom = atom<string>('Hermes Tredo');
+export const selectedModelAtom = atom<string>(loadSettings<string>('selected_model', 'nemotron-3-nano:4b'));
+export const selectedAgentAtom = atom<string>(loadSettings<string>('selected_agent', 'Nethra Swarm'));
+export const selectedModuleAtom = atom<string>(loadSettings<string>('selected_module', 'all'));
+
+// --- CHAT SESSION STATE ---
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  agent: string;
+  model: string;
+  timestamp: number;
+}
+
+const DEFAULT_SESSIONS: ChatSession[] = [
+  {
+    id: 'session-1',
+    title: 'Sethu System Health & Intel',
+    messages: [
+      {
+        sender: 'Nethra',
+        text: 'Greetings, Operator. Nethra Swarm is online. Chat, Tredo, and Tantra modules are operational.',
+        timestamp: Date.now() - 3600000,
+      },
+    ],
+    agent: 'Nethra Swarm',
+    model: 'nemotron-3-nano:4b',
+    timestamp: Date.now() - 3600000,
+  },
+  {
+    id: 'session-2',
+    title: 'BTC Conviction Analysis',
+    messages: [
+      { sender: 'Operator', text: 'Run skills analysis on BTC-USD.', timestamp: Date.now() - 1800000 },
+      {
+        sender: 'Nethra',
+        text: '🟢 **Nethra Skills Analysis** for BTC-USD\nConviction: 41% (Bullish)\nSignals: 20 Bullish | 6 Bearish | 3 Neutral\nSkills Fired: 29/32 skills triggered',
+        timestamp: Date.now() - 1795000,
+      },
+    ],
+    agent: 'Nethra Swarm',
+    model: 'nemotron-3-nano:4b',
+    timestamp: Date.now() - 1800000,
+  },
+  {
+    id: 'session-3',
+    title: 'Tantra Risk Policy Review',
+    messages: [
+      { sender: 'Operator', text: 'What is the current safety coordination index?', timestamp: Date.now() - 600000 },
+      {
+        sender: 'Nethra',
+        text: 'Safety coordinator index is set to HIGH_GUARD due to active calendar DND schedule.',
+        timestamp: Date.now() - 590000,
+      },
+    ],
+    agent: 'Risk Manager',
+    model: 'nemotron-3-nano:4b',
+    timestamp: Date.now() - 600000,
+  },
+];
+
+export const chatSessionsAtom = atom<ChatSession[]>(DEFAULT_SESSIONS);
+export const activeSessionIdAtom = atom<string>('session-1');
+export const skillAnalyzingAtom = atom<boolean>(false);
+export const isTypingAtom = atom<boolean>(false);
 
 // --- TREDO STATE ---
 export interface OpenOrder {
@@ -52,7 +117,97 @@ export interface Candlestick {
   volume: number;
 }
 
-export const watchlistAtom = atom<string[]>(['BTC-USD', 'ETH-USD', 'SOL-USD', 'XAU-USD']);
+// Auto-migrate standard watchlist if old smaller list (length <= 4) is stored
+if (typeof window !== 'undefined') {
+  try {
+    const stored = localStorage.getItem('tredo_settings_watchlist');
+    if (stored) {
+      const list = JSON.parse(stored);
+      if (Array.isArray(list) && list.length <= 4) {
+        localStorage.removeItem('tredo_settings_watchlist');
+        localStorage.removeItem('tredo_settings_base_prices');
+      }
+    }
+  } catch {}
+}
+
+const DEFAULT_WATCHLIST = [
+  // Crypto
+  'BTC-USD', 'ETH-USD', 'SOL-USD', 'ADA-USD', 'XRP-USD', 
+  'DOT-USD', 'DOGE-USD', 'LTC-USD', 'LINK-USD', 'AVAX-USD', 
+  'TRX-USD', 'SHIB-USD', 'TON-USD', 'SUI-USD', 'NEAR-USD',
+  // US Stocks
+  'AAPL', 'TSLA', 'MSFT', 'NVDA', 'AMZN', 
+  'GOOG', 'META', 'AMD', 'NFLX', 'MS', 
+  'JPM', 'V', 'DIS', 'WMT', 'COST',
+  // Indian Stocks (NSE)
+  'NSE:RELIANCE', 'NSE:TCS', 'NSE:HDFCBANK', 'NSE:INFY', 'NSE:ICICIBANK', 
+  'NSE:SBIN', 'NSE:BHARTIALRT', 'NSE:ITC', 'NSE:LTIM', 'NSE:LT', 
+  'NSE:HINDUNILVR', 'NSE:SUNPHARMA', 'NSE:KOTAKBANK', 'NSE:AXISBANK', 'NSE:TATASTEEL',
+  // Commodities & Others
+  'XAU-USD', 'XAG-USD', 'USOIL', 'NGAS'
+];
+
+const DEFAULT_BASE_PRICES = {
+  // Crypto
+  'BTC-USD': 77430.0,
+  'ETH-USD': 3450.0,
+  'SOL-USD': 142.5,
+  'ADA-USD': 0.58,
+  'XRP-USD': 1.15,
+  'DOT-USD': 6.20,
+  'DOGE-USD': 0.16,
+  'LTC-USD': 84.50,
+  'LINK-USD': 15.20,
+  'AVAX-USD': 28.40,
+  'TRX-USD': 0.12,
+  'SHIB-USD': 0.000018,
+  'TON-USD': 5.50,
+  'SUI-USD': 1.85,
+  'NEAR-USD': 5.20,
+  // US Stocks
+  'AAPL': 185.20,
+  'TSLA': 178.50,
+  'MSFT': 415.60,
+  'NVDA': 910.30,
+  'AMZN': 182.40,
+  'GOOG': 172.80,
+  'META': 485.40,
+  'AMD': 164.20,
+  'NFLX': 610.50,
+  'MS': 92.30,
+  'JPM': 195.40,
+  'V': 272.50,
+  'DIS': 112.40,
+  'WMT': 60.20,
+  'COST': 725.60,
+  // Indian Stocks
+  'NSE:RELIANCE': 2450.0,
+  'NSE:TCS': 3850.0,
+  'NSE:HDFCBANK': 1520.0,
+  'NSE:INFY': 1430.0,
+  'NSE:ICICIBANK': 1120.0,
+  'NSE:SBIN': 740.0,
+  'NSE:BHARTIALRT': 1210.0,
+  'NSE:ITC': 430.0,
+  'NSE:LTIM': 4850.0,
+  'NSE:LT': 3520.0,
+  'NSE:HINDUNILVR': 2240.0,
+  'NSE:SUNPHARMA': 1540.0,
+  'NSE:KOTAKBANK': 1720.0,
+  'NSE:AXISBANK': 1060.0,
+  'NSE:TATASTEEL': 145.0,
+  // Commodities
+  'XAU-USD': 2352.0,
+  'XAG-USD': 28.40,
+  'USOIL': 78.50,
+  'NGAS': 2.45
+};
+
+export const watchlistAtom = atom<string[]>(loadSettings<string[]>('watchlist', DEFAULT_WATCHLIST));
+export const basePricesAtom = atom<Record<string, number>>(
+  loadSettings<Record<string, number>>('base_prices', DEFAULT_BASE_PRICES)
+);
 export const selectedAssetAtom = atom<string>('BTC-USD');
 export const orderBookAtom = atom<OrderBook | null>(null);
 export const activeTradesAtom = atom<Trade[]>([]);
@@ -116,6 +271,7 @@ export const metricsAtom = atom<{ cpu: number; memory: number; tps: number }>({
   memory: 45.2,
   tps: 0,
 });
+export const serverActiveAtom = atom<boolean>(true);
 
 export const calendarEventsAtom = atom<CalendarEvent[]>([
   {
@@ -270,6 +426,7 @@ export interface SettingsModel {
   active: boolean;
   max_tokens: number;
   temperature: number;
+  category: 'cloud' | 'local';
 }
 
 export interface SettingsApiKey {
@@ -277,6 +434,7 @@ export interface SettingsApiKey {
   service: string;
   key: string;
   active: boolean;
+  category: 'exchange' | 'news' | 'ai';
 }
 
 export interface SettingsAgent {
@@ -320,7 +478,7 @@ export interface SettingsTool {
 // Helper to load from localStorage
 function loadSettings<T>(key: string, defaults: T): T {
   try {
-    const stored = localStorage.getItem(`arkm_settings_${key}`);
+    const stored = localStorage.getItem(`tredo_settings_${key}`);
     if (stored) return JSON.parse(stored);
   } catch {}
   return defaults;
@@ -333,15 +491,16 @@ export const settingsModelsAtom = atom<SettingsModel[]>(
       name: 'Default Ollama',
       provider: 'ollama',
       endpoint: 'http://localhost:11434',
-      model_name: 'llama3.2',
+      model_name: 'nemotron-3-nano:4b',
       api_key_ref: '',
       active: true,
       max_tokens: 4096,
       temperature: 0.7,
+      category: 'local',
     },
     {
-      id: 'model-hermes',
-      name: 'Hermes Gemini',
+      id: 'model-nethra',
+      name: 'Nethra Gemini',
       provider: 'gemini',
       endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
       model_name: 'gemini-2.0-flash',
@@ -349,27 +508,38 @@ export const settingsModelsAtom = atom<SettingsModel[]>(
       active: true,
       max_tokens: 8192,
       temperature: 0.3,
+      category: 'cloud',
     },
   ])
 );
 
 export const settingsApiKeysAtom = atom<SettingsApiKey[]>(
   loadSettings<SettingsApiKey[]>('api_keys', [
-    { id: 'key-gemini', service: 'gemini', key: '', active: false },
-    { id: 'key-openai', service: 'openai', key: '', active: false },
-    { id: 'key-binance', service: 'binance', key: '', active: false },
-    { id: 'key-kucoin', service: 'kucoin', key: '', active: false },
+    { id: 'key-gemini', service: 'gemini', key: '', active: false, category: 'ai' },
+    { id: 'key-openai', service: 'openai', key: '', active: false, category: 'ai' },
+    { id: 'key-binance', service: 'binance', key: '', active: false, category: 'exchange' },
+    { id: 'key-kucoin', service: 'kucoin', key: '', active: false, category: 'exchange' },
+    { id: 'key-news-finnhub', service: 'finnhub.io', key: '', active: false, category: 'news' },
+    { id: 'key-news-cryptopanic', service: 'cryptopanic', key: '', active: false, category: 'news' },
+    { id: 'key-news-polygon', service: 'polygon.io', key: '', active: false, category: 'news' },
+    { id: 'key-news-rss2json', service: 'rss2json', key: '', active: false, category: 'news' },
+    { id: 'key-news-gnews', service: 'gnews', key: '', active: false, category: 'news' },
+    { id: 'key-news-thenewsapi', service: 'thenewsapi', key: '', active: false, category: 'news' },
+    { id: 'key-news-mediastack', service: 'mediastack', key: '', active: false, category: 'news' },
+    { id: 'key-news-currents', service: 'currents', key: '', active: false, category: 'news' },
+    { id: 'key-news-bloomberg', service: 'bloomberg', key: '', active: false, category: 'news' },
+    { id: 'key-news-coindesk', service: 'coindesk', key: '', active: false, category: 'news' },
   ])
 );
 
 export const settingsAgentsAtom = atom<SettingsAgent[]>(
   loadSettings<SettingsAgent[]>('agents', [
     {
-      id: 'agent-hermes',
-      name: 'Hermes Tredo',
+      id: 'agent-nethra',
+      name: 'Nethra Swarm',
       role: 'analyst',
-      model_id: 'model-hermes',
-      system_prompt: 'You are Hermes, an expert trading analyst. Analyze market data and provide clear trading signals with conviction scores.',
+      model_id: 'model-nethra',
+      system_prompt: 'You are Nethra, an expert autonomous multi-agent swarm. Analyze market data and provide clear trading signals with conviction scores.',
       temperature: 0.3,
       max_tokens: 2048,
       active: true,
@@ -424,8 +594,8 @@ export const settingsToolsAtom = atom<SettingsTool[]>(
     },
     {
       id: 'tool-skills',
-      name: 'Hermes Skills Engine',
-      description: 'Run the full Hermes skills analysis on a symbol',
+      name: 'Nethra Skills Engine',
+      description: 'Run the full Nethra skills analysis on a symbol',
       endpoint: '/api/skills/analyze',
       active: true,
       params: ['symbol', 'current_price', 'candles'],

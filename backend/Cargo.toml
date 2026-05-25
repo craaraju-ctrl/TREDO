@@ -1,15 +1,19 @@
 [package]
-name = "arkm-server"
+name = "tredo-server"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "arkm-server"
+name = "tredo-server"
 path = "src/main.rs"
 
 [lib]
-name = "arkm_server"
+name = "tredo_server"
 path = "src/lib.rs"
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["json"] }
+tower = "0.4"
 
 [dependencies]
 axum = { workspace = true }
@@ -24,17 +28,21 @@ chrono = { workspace = true }
 futures = "0.3"
 tower-http = { version = "0.5", features = ["cors"] }
 
+rmcp = { version = "1.7", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
+
 # Internal crates
-arkm-core      = { path = "../crates/arkm-core" }
-arkm-types      = { path = "../crates/arkm-types" }
-arkm-execution  = { path = "../crates/arkm-execution" }
-arkm-intelligence = { path = "../crates/arkm-intelligence" }
-arkm-exchange   = { path = "../crates/arkm-exchange" }
-arkm-tantra     = { path = "../crates/arkm-tantra" }
-arkm-skills     = { path = "../crates/arkm-skills" }
-arkm-data       = { path = "../crates/arkm-data" }
-arkm-journal    = { path = "../crates/arkm-journal" }
-arkm-autotrader = { path = "../crates/arkm-autotrader" }
-arkm-stream    = { path = "../crates/arkm-stream" }
-arkm-learning  = { path = "../crates/arkm-learning" }
-arkm-bridge    = { path = "../crates/arkm-bridge" }
+tredo-core      = { path = "../crates/tredo-core" }
+tredo-types      = { path = "../crates/tredo-types" }
+tredo-execution  = { path = "../crates/tredo-execution" }
+tredo-intelligence = { path = "../crates/tredo-intelligence" }
+tredo-exchange   = { path = "../crates/tredo-exchange" }
+tredo-tantra     = { path = "../crates/tredo-tantra" }
+tredo-skills     = { path = "../crates/tredo-skills" }
+tredo-data       = { path = "../crates/tredo-data" }
+tredo-journal    = { path = "../crates/tredo-journal" }
+tredo-autotrader = { path = "../crates/tredo-autotrader" }
+tredo-stream    = { path = "../crates/tredo-stream" }
+tredo-mcp       = { path = "../crates/tredo-mcp" }
+tredo-learning  = { path = "../crates/tredo-learning" }
+tredo-bridge    = { path = "../crates/tredo-bridge" }
+tredo-swarm     = { path = "../crates/tredo-swarm" }
