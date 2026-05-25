@@ -67,6 +67,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      - run: npm install --prefer-offline --no-audit
+      - run: cd frontend && npm install --prefer-offline --no-audit
       - run: npm run web:build
 
       # Artifacts, optional for personal use
