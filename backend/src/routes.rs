@@ -143,7 +143,7 @@ pub fn router(state: AppState) -> Router {
                 std::sync::Arc::new(LocalSessionManager::default()),
                 StreamableHttpServerConfig::default()
                     .with_allowed_hosts(["localhost", "127.0.0.1", "::1", "0.0.0.0"])
-                    .with_sse_keep_alive(None),
+                    .with_sse_keep_alive(Some(std::time::Duration::from_secs(15))),
             )
         })
         // WebSocket
