@@ -33,3 +33,8 @@ node_modules
 # Frontend build & electron artifacts
 frontend/dist/
 frontend/dist_electron/
+
+# Local cache & databases
+.turbo/
+*.db
+agents/storage/
