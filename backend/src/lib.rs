@@ -1,31 +1,29 @@
 pub mod routes;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use std::sync::Arc;
 
-use arkm_types::{ExecutionCommand, TantraCommand, RiskEngine};
-use arkm_execution::{ExecutionEngine, StateCache};
-use arkm_intelligence::{IntelligencePool, GeminiLLM};
-use arkm_exchange::ExchangeAdapters;
-use arkm_data::YahooFinanceProvider;
-use arkm_journal::TradeJournal;
-use arkm_autotrader::{AutoTradingLoop, AutoTradingConfig};
-use arkm_learning::{LearningEngine, LearningConfig};
-use arkm_stream::StreamRegistry;
-use arkm_bridge::{
-    RedisBridge, AgentRegistry, TieredCache, HierarchicalRAG, SharedMemory,
-    CacheConfig, RAGConfig, SharedMemoryConfig,
-};
-use arkm_skills::{SkilledAgent, HermesAgent};
-use arkm_core::{
-    AgentProvider, LLMProvider, PluginRegistry, DefaultPluginRegistry,
-};
-use tokio::sync::Mutex;
 pub use routes::{router, AppState};
+use tokio::sync::Mutex;
+use tredo_autotrader::{AutoTradingConfig, AutoTradingLoop};
+use tredo_bridge::{
+    AgentRegistry, CacheConfig, HierarchicalRAG, RAGConfig, RedisBridge, SharedMemory,
+    SharedMemoryConfig, TieredCache,
+};
+use tredo_core::{AgentProvider, DefaultPluginRegistry, LLMProvider, PluginRegistry};
+use tredo_data::YahooFinanceProvider;
+use tredo_exchange::ExchangeAdapters;
+use tredo_execution::{ExecutionEngine, StateCache};
+use tredo_intelligence::{IntelligencePool, OllamaLLM};
+use tredo_journal::TradeJournal;
+use tredo_learning::{LearningConfig, LearningEngine};
+use tredo_mcp::McpState;
+use tredo_stream::StreamRegistry;
+use tredo_types::{ExecutionCommand, RiskEngine, TantraCommand};
 
 pub async fn start_server() {
     tracing_subscriber::fmt::init();
-    println!("🚀 ARKM Production Orchestrator v3 starting...");
+    println!("🚀 TREDO Production Orchestrator v3 starting...");
     println!("   Features: Plugin architecture, WebSocket streaming, Self-learning engine, Sub-agent framework, Tiered KV cache, Redis bridge (Python↔Rust), Hot-swappable providers");
 
     // Channel capacity
@@ -37,7 +35,9 @@ pub async fn start_server() {
 
     // ── Stream Registry (WebSocket broadcast) ─────────────────────────────
     let stream_registry = Arc::new(StreamRegistry::new());
-    stream_registry.global().alert("info", "ARKM v3 orchestrator initializing");
+    stream_registry
+        .global()
+        .alert("info", "TREDO v3 orchestrator initializing");
 
     // Spawn fast-path execution engine
     let engine = ExecutionEngine::new(
@@ -52,37 +52,38 @@ pub async fn start_server() {
     let redis_url = std::env::var("REDIS_URL").ok();
     let redis_bridge = Arc::new(RedisBridge::new(redis_url));
     if let Err(e) = redis_bridge.connect().await {
-        println!("[ARKM] ⚠️ Redis bridge connection failed: {} (Python-Rust bridge disabled)", e);
+        println!(
+            "[TREDO] ⚠️ Redis bridge connection failed: {} (Python-Rust bridge disabled)",
+            e
+        );
     } else {
-        println!("[ARKM] ✅ Redis bridge connected (Python Hermes ↔ Rust ARKM)");
+        println!("[TREDO] ✅ Redis bridge connected (Python Nethra ↔ Rust TREDO)");
     }
 
-    let agent_registry = Arc::new(AgentRegistry::new(
-        redis_bridge.clone(),
-        "rust_arkm",
-    ));
+    let agent_registry = Arc::new(AgentRegistry::new(redis_bridge.clone(), "rust_tredo"));
 
     // Register Rust sub-agents
-    let rust_reg = arkm_bridge::AgentRegistration {
-        agent_id: "rust_arkm".to_string(),
-        agent_type: arkm_bridge::AgentType::RustARKM,
-        display_name: "ARKM Trading Engine".to_string(),
-        description: "Rust-based automated trading engine with plugin provider architecture".to_string(),
+    let rust_reg = tredo_bridge::AgentRegistration {
+        agent_id: "rust_tredo".to_string(),
+        agent_type: tredo_bridge::AgentType::RustTREDO,
+        display_name: "TREDO Trading Engine".to_string(),
+        description: "Rust-based automated trading engine with plugin provider architecture"
+            .to_string(),
         capabilities: vec![
-            arkm_bridge::AgentCapability::MarketAnalysis,
-            arkm_bridge::AgentCapability::TradeExecution,
-            arkm_bridge::AgentCapability::RiskAssessment,
-            arkm_bridge::AgentCapability::Intelligence,
-            arkm_bridge::AgentCapability::SelfLearning,
+            tredo_bridge::AgentCapability::MarketAnalysis,
+            tredo_bridge::AgentCapability::TradeExecution,
+            tredo_bridge::AgentCapability::RiskAssessment,
+            tredo_bridge::AgentCapability::Intelligence,
+            tredo_bridge::AgentCapability::SelfLearning,
         ],
         channels: vec![
-            "hermes:global".to_string(),
-            "hermes:trade_signals".to_string(),
-            "hermes:analysis".to_string(),
-            "hermes:agent:rust_arkm".to_string(),
+            "nethra:global".to_string(),
+            "nethra:trade_signals".to_string(),
+            "nethra:analysis".to_string(),
+            "nethra:agent:rust_tredo".to_string(),
         ],
         weight: 1.0,
-        status: arkm_bridge::AgentStatus::Active,
+        status: tredo_bridge::AgentStatus::Active,
         last_heartbeat: chrono::Utc::now(),
         registered_at: chrono::Utc::now(),
         metadata: serde_json::json!({"version": "v3", "features": ["plugin_agents", "plugin_llms", "websocket", "self_learning", "kv_cache"]}),
@@ -94,30 +95,30 @@ pub async fn start_server() {
         redis_bridge.clone(),
         Some(CacheConfig::default()),
     ));
-    println!("[ARKM] Tiered KV cache initialized (L1: in-memory, L2: Redis, shared with Python)");
+    println!("[TREDO] Tiered KV cache initialized (L1: in-memory, L2: Redis, shared with Python)");
 
     // ── Hierarchical RAG DB ───────────────────────────────────────────────
     let rag_db = Arc::new(HierarchicalRAG::new(
         redis_bridge.clone(),
         Some(RAGConfig::default()),
     ));
-    println!("[ARKM] Hierarchical RAG initialized (L1: Redis, L2: SQLite, L3: reserved for PG)");
+    println!("[TREDO] Hierarchical RAG initialized (L1: Redis, L2: SQLite, L3: reserved for PG)");
 
     // ── Shared Memory Layer ───────────────────────────────────────────────
     let shared_memory = Arc::new(SharedMemory::new(
         redis_bridge.clone(),
         Some(SharedMemoryConfig::default()),
     ));
-    println!("[ARKM] Shared memory layer initialized (256MB max, auto-eviction on pressure)");
+    println!("[TREDO] Shared memory layer initialized (256MB max, auto-eviction on pressure)");
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Plugin Architecture — Dependency Injection
     // ═══════════════════════════════════════════════════════════════════════
     //
-    //  The entire intelligence layer is now pluggable via arkm_core traits:
+    //  The entire intelligence layer is now pluggable via tredo_core traits:
     //
     //    AgentProvider ─► SkilledAgent (Rust native, 30+ skills)
-    //                    HermesBridgeAgent (Python Hermes via Redis)
+    //                    NethraBridgeAgent (Python Nethra via Redis)
     //                    GemiCloudAgent (future)
     //
     //    LLMProvider   ─► GeminiLLM (Google Gemini API)
@@ -127,51 +128,88 @@ pub async fn start_server() {
     //  Providers are registered in the PluginRegistry and can be swapped
     //  at runtime via the /api/providers/* routes without restarting.
 
-    println!("[ARKM] ── Plugin Architecture ────────────────────────────────");
+    println!("[TREDO] ── Plugin Architecture ────────────────────────────────");
 
-    // 1. Create Rust-native agent provider (SkilledAgent wrapping HermesAgent)
-    let hermes = Arc::new(HermesAgent::new());
-    let skilled_agent: Arc<dyn AgentProvider> = Arc::new(SkilledAgent::new(hermes));
-    println!("[ARKM]   ✅ Agent Provider: skilled (Rust native, 30+ technical/risk/portfolio skills)");
+    // 1. Create global native Rust skills evaluator
+    let skills_evaluator = Arc::new(tredo_skills::NethraAgent::new());
 
-    // 2. Create LLM provider (GeminiLLM)
-    let gemini_llm: Arc<dyn LLMProvider> = Arc::new(GeminiLLM::new(None, None));
-    println!("[ARKM]   ✅ LLM Provider: {} ({})", gemini_llm.provider_name(), gemini_llm.model_name());
+    // 2. Nethra Swarm Proxy is now handled via the unified SwarmAgentProvider (see below)
+    println!("[TREDO]   ✅ Agent Provider: Nethra Swarm Proxy (hot-swappable container)");
 
-    // 3. Create DI container (PluginRegistry)
-    let registry: Arc<dyn PluginRegistry> = Arc::new(DefaultPluginRegistry::new());
-    let _ = registry.register_agent("skilled", skilled_agent.clone());
-    let _ = registry.register_llm("gemini", gemini_llm.clone());
-    println!("[ARKM]   ✅ Plugin Registry initialized with 1 agent + 1 LLM provider");
+    // 3. Create Rust-native agent provider (SkilledAgent wrapping NethraAgent)
+    let skilled_agent = Arc::new(tredo_skills::SkilledAgent::new(skills_evaluator.clone()));
+    let skilled_agent_arc: Arc<dyn AgentProvider> = skilled_agent.clone();
+    println!(
+        "[TREDO]   ✅ Agent Provider: skilled (Rust native, 30+ technical/risk/portfolio skills)"
+    );
 
-    // 4. Conditionally register HermesBridgeAgent if Redis is connected
-    if true {
-        // Check if bridge is connected by trying to publish
-        // HermesBridgeAgent will handle fallback if Python is unreachable
-        let bridge_agent = arkm_bridge::HermesBridgeAgent::new(redis_bridge.clone(), "rust_arkm", "python_hermes");
-        let bridge_agent_arc: Arc<dyn AgentProvider> = Arc::new(bridge_agent);
-        let _ = registry.register_agent("hermes_bridge", bridge_agent_arc);
-        println!("[ARKM]   ✅ Agent Provider: hermes_bridge (Redis proxy to Python Hermes)");
-    }
+    // 4. Create LLM providers (OllamaLLM running local nemetron:4b, GeminiLLM for risk & reasoning)
+    let ollama_llm: Arc<dyn LLMProvider> = Arc::new(OllamaLLM::new(
+        Some("http://localhost:11434".to_string()),
+        Some("nemetron:4b".to_string()),
+    ));
+    println!(
+        "[TREDO]   ✅ LLM Provider: {} ({})",
+        ollama_llm.provider_name(),
+        ollama_llm.model_name()
+    );
 
-    // 5. Create the IntelligencePool (orchestrator)
-    // Uses skilled agent for market analysis and gemini for LLM queries
-    let intelligence = Arc::new(IntelligencePool::new(
-        skilled_agent.clone(),
+    let gemini_llm: Arc<dyn LLMProvider> = Arc::new(tredo_intelligence::GeminiLLM::new(None, None));
+    println!(
+        "[TREDO]   ✅ LLM Provider: {} ({})",
+        gemini_llm.provider_name(),
+        gemini_llm.model_name()
+    );
+
+    // 5. Create native Rust Multi-Agent Swarm Provider
+    // Pass local_llm (Ollama) and cloud_llm (Gemini) so execution-related bots run locally and Risk Assessor uses Gemini.
+    let swarm_bots = tredo_swarm::BotSwarm::new_tredo_swarm(
+        skilled_agent_arc.clone(),
+        ollama_llm.clone(),
         gemini_llm.clone(),
+    );
+    // Coordinator (Nethra) uses Gemini for high-quality strategic deep reasoning.
+    let swarm_coordinator = tredo_swarm::SwarmCoordinator::new(
+        skilled_agent_arc.clone(),
+        gemini_llm.clone(),
+        swarm_bots,
+    );
+    let swarm_agent = Arc::new(tredo_swarm::SwarmAgentProvider::new(
+        swarm_coordinator,
+        "swarm",
+    ));
+    let swarm_agent_arc: Arc<dyn AgentProvider> = swarm_agent.clone();
+    println!("[TREDO]   ✅ Agent Provider: swarm (Rust native hierarchical multi-agent swarm)");
+
+    // 6. Create DI container (PluginRegistry)
+    let registry: Arc<dyn PluginRegistry> = Arc::new(DefaultPluginRegistry::new());
+    let _ = registry.register_agent("nethra", swarm_agent_arc.clone());
+    let _ = registry.register_agent("nethra-swarm", swarm_agent_arc.clone());
+    let _ = registry.register_agent("skilled", skilled_agent_arc.clone());
+    let _ = registry.register_agent("swarm", swarm_agent_arc.clone());
+    let _ = registry.register_llm("ollama", ollama_llm.clone());
+    let _ = registry.register_llm("gemini", gemini_llm.clone());
+    println!("[TREDO]   ✅ Plugin Registry initialized with Nethra Swarm, Skilled, local LLM provider, and Gemini cloud LLM provider");
+
+    // 7. Create the IntelligencePool (orchestrator)
+    // Uses the native Rust multi-agent swarm by default
+    let intelligence = Arc::new(IntelligencePool::new(
+        swarm_agent_arc.clone(),
+        ollama_llm.clone(),
         registry.clone(),
+        skills_evaluator.clone(),
         3, // max 3 concurrent LLM requests
         Some(tiered_cache.clone()),
     ));
-    println!("[ARKM]   ✅ IntelligencePool orchestrated with skilled agent + Gemini LLM");
-    println!("[ARKM] ────────────────────────────────────────────────────────");
+    println!("[TREDO]   ✅ IntelligencePool orchestrated with active swarm agent + local skills evaluator + Ollama LLM");
+    println!("[TREDO] ────────────────────────────────────────────────────────");
 
     // Start exchange adapters (Binance + KuCoin market feeds)
     let adapters = ExchangeAdapters::new(execution_tx.clone());
     tokio::spawn(async move { adapters.start().await });
 
     // Start TANTRA coworker safety service
-    use arkm_tantra::TantraService;
+    use tredo_tantra::TantraService;
     let tantra = Arc::new(TantraService::new());
     let tantra_clone = tantra.clone();
     tokio::spawn(async move {
@@ -189,26 +227,25 @@ pub async fn start_server() {
         historical_decay: 0.95,
     };
     let learning_engine = Arc::new(Mutex::new(LearningEngine::new(learning_config)));
-    println!("[ARKM] Self-learning engine initialized");
+    println!("[TREDO] Self-learning engine initialized");
 
     // ── Auto-Trading System ───────────────────────────────────────────────
 
     let data_provider = Arc::new(YahooFinanceProvider::new());
 
-    let journal_path = std::env::var("ARKM_JOURNAL_PATH")
-        .unwrap_or_else(|_| "arkm_trades.db".to_string());
+    let journal_path =
+        std::env::var("TREDO_JOURNAL_PATH").unwrap_or_else(|_| "tredo_trades.db".to_string());
     let journal = Arc::new(Mutex::new(
-        TradeJournal::new(&journal_path)
-            .expect("Failed to open trade journal database")
+        TradeJournal::new(&journal_path).expect("Failed to open trade journal database"),
     ));
-    println!("[ARKM] Trade journal initialized at {}", journal_path);
+    println!("[TREDO] Trade journal initialized at {}", journal_path);
 
-    // Auto-trading loop uses SkilledAgent (via AgentProvider trait)
+    // Auto-trading loop uses Swarm Agent Provider (via AgentProvider trait)
     let auto_trade_config = AutoTradingConfig::default();
     let auto_trader = Arc::new(AutoTradingLoop::new(
         auto_trade_config,
         data_provider.clone(),
-        skilled_agent.clone(), // uses Arc<dyn AgentProvider>
+        swarm_agent_arc.clone(), // uses Arc<dyn AgentProvider>
         journal.clone(),
         learning_engine.clone(),
     ));
@@ -219,15 +256,35 @@ pub async fn start_server() {
         auto_trader_clone.run().await;
     });
 
-    println!("[ARKM] Auto-trading loop with pluggable agent provider started (initially paused — enable via API)");
+    println!("[TREDO] Auto-trading loop with pluggable agent provider started (initially paused — enable via API)");
 
     // Broadcast initial state via WebSocket
-    stream_registry.global().alert("info", "Auto-trading system initialized. All providers registered.");
+    stream_registry.global().alert(
+        "info",
+        "Auto-trading system initialized. All providers registered.",
+    );
 
-    // Subscribe to trade signals from Python Hermes
+    // Subscribe to trade signals from Python Nethra
     let _ = agent_registry.subscribe_global().await;
 
     // Build Axum state and routes with all new components
+    // ── MCP State ───────────────────────────────────────────────────────
+    let mcp_state = McpState {
+        intelligence: intelligence.clone(),
+        data_provider: data_provider.clone(),
+        journal: journal.clone(),
+        auto_trader: auto_trader.clone(),
+        learning_engine: learning_engine.clone(),
+        tantra: tantra.clone(),
+        stream_registry: stream_registry.clone(),
+        redis_bridge: redis_bridge.clone(),
+        agent_registry: agent_registry.clone(),
+        tiered_cache: tiered_cache.clone(),
+        shared_memory: shared_memory.clone(),
+        registry: registry.clone(),
+        rag_db: rag_db.clone(),
+    };
+
     let app_state = AppState {
         execution_tx,
         intelligence,
@@ -243,13 +300,14 @@ pub async fn start_server() {
         rag_db,
         shared_memory,
         registry,
+        mcp_state,
     };
     let app = router(app_state);
 
-    println!("✅ ARKM server v3 listening on http://0.0.0.0:8080");
+    println!("✅ TREDO server v3 listening on http://0.0.0.0:8080");
     println!("   WebSocket: ws://0.0.0.0:8080/ws");
     println!("   Provider API: /api/providers/* — swap agents/LLMs at runtime");
-    println!("   Inspired by Hermes Trismegistus — adaptive, self-learning market intelligence");
+    println!("   Inspired by Nethra Trismegistus — adaptive, self-learning market intelligence");
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
         .expect("Failed to bind TCP listener on 0.0.0.0:8080");
@@ -258,10 +316,10 @@ pub async fn start_server() {
     let graceful = async {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                println!("\n[ARKM] ⏳ SIGINT received — shutting down gracefully...");
+                println!("\n[TREDO] ⏳ SIGINT received — shutting down gracefully...");
             }
             _ = shutdown_signal_sigterm() => {
-                println!("\n[ARKM] ⏳ SIGTERM received — shutting down gracefully...");
+                println!("\n[TREDO] ⏳ SIGTERM received — shutting down gracefully...");
             }
         }
     };

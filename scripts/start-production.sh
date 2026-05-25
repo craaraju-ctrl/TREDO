@@ -1,9 +1,9 @@
 #!/bin/bash
-# ── ARKM Monorepo Production Startup Orchestrator ──────────────────────────
+# ── TREDO Monorepo Production Startup Orchestrator ──────────────────────────
 
 set -e
 
-echo "🚀 Booting ARKM Monorepo Production Deployment Stack..."
+echo "🚀 Booting TREDO Monorepo Production Deployment Stack..."
 
 # 1. Environment file setup
 if [ ! -f .env ]; then
@@ -29,7 +29,7 @@ docker compose up -d
 
 # 5. Output active runtime report
 echo ""
-echo "✨ ARKM Cockpit successfully online in production release mode!"
+echo "✨ TREDO Cockpit successfully online in production release mode!"
 echo "------------------------------------------------------------"
 docker compose ps
 echo "------------------------------------------------------------"

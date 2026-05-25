@@ -4,9 +4,9 @@ services:
   # 1. PostgreSQL Database Layer
   postgres:
     image: postgres:15-alpine
-    container_name: arkm-postgres
+    container_name: tredo-postgres
     environment:
-      POSTGRES_DB: arkm_vault
+      POSTGRES_DB: tredo_vault
       POSTGRES_USER: sethu_operator
       POSTGRES_PASSWORD: operator_secure_password_99
     volumes:
@@ -15,7 +15,7 @@ services:
       - "5432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sethu_operator -d arkm_vault"]
+      test: ["CMD-SHELL", "pg_isready -U sethu_operator -d tredo_vault"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,7 +23,7 @@ services:
   # 2. Redis Cache Layer
   redis:
     image: redis:7-alpine
-    container_name: arkm-redis
+    container_name: tredo-redis
     volumes:
       - redis_data:/data
     ports:
@@ -40,9 +40,9 @@ services:
     build:
       context: .
       dockerfile: deployment/Dockerfile.backend
-    container_name: arkm-backend
+    container_name: tredo-backend
     environment:
-      - DATABASE_URL=postgres://sethu_operator:operator_secure_password_99@postgres:5432/arkm_vault
+      - DATABASE_URL=postgres://sethu_operator:operator_secure_password_99@postgres:5432/tredo_vault
       - REDIS_URL=redis://redis:6379
       - PORT=8080
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -58,7 +58,7 @@ services:
     build:
       context: .
       dockerfile: deployment/Dockerfile.frontend
-    container_name: arkm-frontend
+    container_name: tredo-frontend
     ports:
       - "80:80"
     depends_on:
@@ -68,7 +68,7 @@ services:
   # 5. Prometheus Performance Scraper
   prometheus:
     image: prom/prometheus:latest
-    container_name: arkm-prometheus
+    container_name: tredo-prometheus
     volumes:
       - ./deployment/prometheus:/etc/prometheus
     ports:
@@ -78,7 +78,7 @@ services:
   # 6. Grafana Metrics Cockpit Visualizer
   grafana:
     image: grafana/grafana:latest
-    container_name: arkm-grafana
+    container_name: tredo-grafana
     ports:
       - "9001:3000"
     depends_on:

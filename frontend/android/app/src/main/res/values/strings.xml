@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TREDO Cockpit</string>
+    <string name="title_activity_main">TREDO Cockpit</string>
+    <string name="package_name">com.tredo.cockpit</string>
+    <string name="custom_url_scheme">com.tredo.cockpit</string>
+</resources>

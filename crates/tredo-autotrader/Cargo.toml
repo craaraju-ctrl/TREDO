@@ -1,0 +1,17 @@
+[package]
+name = "tredo-autotrader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+tredo-core = { path = "../tredo-core" }
+tredo-data = { path = "../tredo-data" }
+tredo-journal = { path = "../tredo-journal" }
+tredo-types = { path = "../tredo-types" }
+tredo-learning = { path = "../tredo-learning" }

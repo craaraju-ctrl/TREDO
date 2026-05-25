@@ -1,7 +1,7 @@
 # Stage 1: Build
 FROM node:18-alpine AS builder
 
-WORKDIR /usr/src/arkm
+WORKDIR /usr/src/tredo
 
 # Copy package configurations
 COPY package*.json ./
@@ -24,7 +24,7 @@ FROM nginx:alpine
 COPY deployment/nginx.conf /etc/nginx/nginx.conf
 
 # Copy production web assets
-COPY --from=builder /usr/src/arkm/frontend/dist /usr/share/nginx/html
+COPY --from=builder /usr/src/tredo/frontend/dist /usr/share/nginx/html
 
 EXPOSE 80
 

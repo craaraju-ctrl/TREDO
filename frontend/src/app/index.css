@@ -2,28 +2,276 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Glassmorphism glass card utility classes */
-.glass-panel {
-  background: rgba(18, 24, 38, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(30, 41, 59, 0.5);
+/* ── Base Styles ─────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    @apply antialiased;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cyber-dark text-slate-200 font-sans;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Improve focus visibility for accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-cyber-purple ring-offset-2 ring-offset-cyber-dark;
+  }
+
+  /* Selection styling */
+  ::selection {
+    @apply bg-cyber-purple/30 text-white;
+  }
 }
 
-/* Custom scrollbars for the interactive consoles and logs */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ── Glassmorphism Panel ─────────────────────────────────────────────────── */
+
+@layer components {
+  .glass-panel {
+    @apply bg-cyber-panel/80 backdrop-blur-xl border border-cyber-border/50 shadow-panel;
+  }
+
+  .glass-panel-hover {
+    @apply glass-panel transition-all duration-300 hover:border-cyber-purple/30 hover:shadow-purple;
+  }
+
+  .gradient-border {
+    @apply relative;
+  }
+
+  .gradient-border::before {
+    content: '';
+    @apply absolute inset-0 rounded-xl p-[1px] bg-gradient-to-br from-cyber-purple/30 via-transparent to-cyber-green/20 pointer-events-none;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  /* Button Variants */
+  .btn-primary {
+    @apply px-4 py-2 bg-cyber-purple/20 hover:bg-cyber-purple/30 text-cyber-purple 
+           border border-cyber-purple/40 rounded-lg text-xs font-bold font-mono
+           transition-all duration-200 shadow-purple
+           hover:shadow-glow-purple active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-cyber-panel border border-cyber-border/50 text-slate-300
+           rounded-lg text-xs font-bold font-mono transition-all duration-200
+           hover:border-cyber-border hover:text-slate-100 active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-success {
+    @apply px-4 py-2 bg-cyber-green/20 hover:bg-cyber-green/30 text-cyber-green
+           border border-cyber-green/40 rounded-lg text-xs font-bold font-mono
+           transition-all duration-200 shadow-green
+           hover:shadow-glow-green active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400
+           border border-red-500/40 rounded-lg text-xs font-bold font-mono
+           transition-all duration-200 shadow-red active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-cyber-panel/60
+           transition-all duration-200 active:scale-90;
+  }
+
+  /* Input Variants */
+  .input-cyber {
+    @apply w-full bg-cyber-dark/60 border border-cyber-border/60 rounded-lg px-3 py-2
+           text-sm font-mono text-slate-200 placeholder-slate-500
+           focus:outline-none focus:border-cyber-purple/60 focus:ring-1 focus:ring-cyber-purple/30
+           transition-all duration-200;
+  }
+
+  .select-cyber {
+    @apply w-full bg-cyber-dark border border-cyber-border/60 rounded-lg px-3 py-2
+           text-sm font-mono text-slate-200
+           focus:outline-none focus:border-cyber-purple/60 focus:ring-1 focus:ring-cyber-purple/30
+           transition-all duration-200 appearance-none
+           bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20fill%3D%22%239d4edd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.17l3.71-3.94a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%2F%3E%3C%2Fsvg%3E')]
+           bg-[length:1.5rem] bg-[right_0.5rem_center] bg-no-repeat pr-10;
+  }
+
+  /* Badge Variants */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold font-mono border;
+  }
+
+  .badge-success {
+    @apply badge bg-cyber-green/10 text-cyber-green border-cyber-green/30;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-500/10 text-red-400 border-red-500/30;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-500/10 text-amber-400 border-amber-500/30;
+  }
+
+  .badge-info {
+    @apply badge bg-cyber-purple/10 text-cyber-purple border-cyber-purple/30;
+  }
+
+  .badge-neutral {
+    @apply badge bg-slate-500/10 text-slate-400 border-slate-500/30;
+  }
+
+  /* Status indicator dot */
+  .status-dot {
+    @apply w-2 h-2 rounded-full inline-block;
+  }
+
+  .status-dot-active {
+    @apply status-dot bg-cyber-green animate-pulse shadow-[0_0_8px_rgba(0,230,118,0.5)];
+  }
+
+  .status-dot-inactive {
+    @apply status-dot bg-slate-500;
+  }
+
+  .status-dot-warning {
+    @apply status-dot bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)];
+  }
+
+  .status-dot-danger {
+    @apply status-dot bg-red-500 animate-pulse shadow-[0_0_8px_rgba(244,67,54,0.5)];
+  }
+
+  /* Data table styles */
+  .data-table {
+    @apply w-full text-[10px] font-mono text-left;
+  }
+
+  .data-table thead tr {
+    @apply text-slate-500 border-b border-cyber-border/40;
+  }
+
+  .data-table thead th {
+    @apply pb-2 pr-3 font-semibold uppercase tracking-wider;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-cyber-border/10 transition-colors duration-150 hover:bg-cyber-panel/30;
+  }
+
+  .data-table tbody td {
+    @apply py-2 pr-3;
+  }
+
+  /* Card styles */
+  .stat-card {
+    @apply bg-cyber-dark/40 border border-cyber-border/40 rounded-xl p-4 transition-all duration-200
+           hover:border-cyber-border/60;
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-cyber {
+    scrollbar-width: thin;
+    scrollbar-color: #1e293b transparent;
+  }
+
+  .scrollbar-cyber::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  .scrollbar-cyber::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-cyber::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 999px;
+  }
+
+  .scrollbar-cyber::-webkit-scrollbar-thumb:hover {
+    background: #7b2cbf;
+  }
+
+  /* Skeleton loading */
+  .skeleton {
+    @apply bg-cyber-border/30 rounded animate-pulse;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply w-full bg-slate-800 rounded-full h-1.5 overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #0a0e17;
+/* ── Utility Animations ─────────────────────────────────────────────────── */
+
+@layer utilities {
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(157, 78, 221, 0.08) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.15s ease-out;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 3px;
+/* ── Keyframe Animations ─────────────────────────────────────────────────── */
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #7b2cbf;
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

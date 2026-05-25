@@ -1,4 +1,4 @@
-# ARKM — Autonomous Agent Trading Cockpit
+# TREDO — Autonomous Agent Trading Cockpit
 
 > **Built on the Sethu Bridge Architecture**  
 > A production-grade, modular AI trading orchestrator with a high-performance Rust backend and a reactive TypeScript frontend.
@@ -7,7 +7,7 @@
 
 ## Overview
 
-**ARKM** is an enterprise autonomous quantitative trading system composed of three specialized modules, unified by the **Sethu Bridge** — a shared orchestration layer that synchronizes state, tools, skills, and database memory across all components.
+**TREDO** is an enterprise autonomous quantitative trading system composed of three specialized modules, unified by the **Sethu Bridge** — a shared orchestration layer that synchronizes state, tools, skills, and database memory across all components.
 
 ### The Three Modules
 
@@ -22,7 +22,7 @@
 ## Architecture
 
 ```
-arkm/
+tredo/
 ├── Cargo.toml                    # Root Rust workspace manifest
 ├── package.json                  # Root NPM monorepo (Turborepo)
 ├── turbo.json                    # Turborepo pipeline config
@@ -31,14 +31,14 @@ arkm/
 ├── README.md
 │
 ├── crates/                       # Rust library crates (workspace members)
-│   ├── arkm-types/               # Shared types, enums, wire contracts (Borsh schemas)
-│   ├── arkm-core/                # Re-exports & shared primitives
-│   ├── arkm-execution/           # Fast-path ExecutionEngine (optimistic accounting, DashMap)
-│   ├── arkm-intelligence/        # Slow-path LLM pool (Semaphore-gated, CoT-safe)
-│   ├── arkm-exchange/            # Binance & KuCoin WebSocket adapters + User Data Streams
-│   └── arkm-tantra/              # Alert dispatcher, systems logger, metrics monitor
+│   ├── tredo-types/               # Shared types, enums, wire contracts (Borsh schemas)
+│   ├── tredo-core/                # Re-exports & shared primitives
+│   ├── tredo-execution/           # Fast-path ExecutionEngine (optimistic accounting, DashMap)
+│   ├── tredo-intelligence/        # Slow-path LLM pool (Semaphore-gated, CoT-safe)
+│   ├── tredo-exchange/            # Binance & KuCoin WebSocket adapters + User Data Streams
+│   └── tredo-tantra/              # Alert dispatcher, systems logger, metrics monitor
 │
-├── backend/                      # arkm-server binary package (Axum v0.7)
+├── backend/                      # tredo-server binary package (Axum v0.7)
 │   ├── Cargo.toml
 │   └── src/
 │       ├── main.rs               # Thin entrypoint delegating to lib
@@ -67,28 +67,89 @@ arkm/
     └── Dockerfile.frontend       # Static React build served via NGINX
 ```
 
+### Agent Interaction Flow
+
+```mermaid
+graph TD
+    %% Frontend Layer
+    UI["Frontend (React + Jotai)"] -->|HTTP REST / WS| BE["Backend (Axum Server)"]
+
+    %% Backend Layer
+    BE -->|1. Fetch Candles| YF["YahooFinanceProvider"]
+    BE -->|2. Detect Regime| RD["RegimeDetector"]
+    BE -->|3. Get Conviction Threshold| LE["LearningEngine"]
+    BE -->|4. Analyze Market| IP["IntelligencePool (Orchestrator)"]
+
+    %% Orchestrator & Skills Evaluator
+    IP -->|5. Run Local Skills| SE["Skills Evaluator (NethraAgent)"]
+    SE -->|Compute 30+ Technical, Risk, Portfolio Signals| SE
+    SE -->|Inject local_skills| Context["MarketAnalysisContext"]
+
+    %% Agent Routing
+    Context -->|Route to Active Agent| ProviderRegistry{"PluginRegistry"}
+    
+    %% Native Rust Route
+    ProviderRegistry -->|Option A: 'skilled'| SA["SkilledAgent (Rust Native)"]
+    SA -->|Consolidate & Decide| Decision["BUY / SELL / HOLD / SKIP"]
+
+    %% Python Bridge Route
+    ProviderRegistry -->|Option B: 'nethra'| HBA["NethraBridgeAgent (Redis Bridge)"]
+    HBA -->|Forward via Redis Pub/Sub| Redis[("Redis Bus")]
+    Redis -->|JSON-RPC RPC payload with local_skills| PyNethra["Python Nethra Agent"]
+    PyNethra -->|Analyze & Respond| Redis
+    Redis -->|Return response| HBA
+    HBA --> Decision
+
+    %% Execution
+    Decision -->|5. Dispatch| EE["ExecutionEngine (Fast-Path)"]
+    EE -->|Pre-Trade Verification| RE["RiskEngine"]
+    EE -->|Calendar-Aware Safety check| TS["TANTRA Service"]
+    EE -->|Deduct Balance / Update State| State["State Cache (DashMap)"]
+    EE -->|Order Routing| Adapters["Exchange Adapters (Binance / KuCoin)"]
+    
+    %% Broadcast
+    Decision -->|Broadcast| WS["StreamRegistry (WebSockets)"]
+    WS -->|Live Updates| UI
+    
+    %% Style definitions
+    classDef primary fill:#4f46e5,stroke:#312e81,stroke-width:2px,color:#fff;
+    classDef secondary fill:#0d9488,stroke:#115e59,stroke-width:2px,color:#fff;
+    classDef bridge fill:#ea580c,stroke:#7c2d12,stroke-width:2px,color:#fff;
+    classDef db fill:#0284c7,stroke:#075985,stroke-width:2px,color:#fff;
+    
+    class UI,BE primary;
+    class IP,SE,SA secondary;
+    class HBA,Redis,PyNethra bridge;
+    class YF,RD,LE,Context,EE,RE,TS,State,Adapters,WS db;
+```
+
 ---
 
 ## Technology Stack
 
 ### Backend (Rust)
-| Layer | Technology |
-|-------|-----------|
-| HTTP Server | `axum` v0.7 |
-| Async Runtime | `tokio` v1 |
-| Shared State | `dashmap` (lock-free concurrent hashmap) |
-| Serialization | `serde` + `borsh` v1 (binary protocol) |
-| IDs & Timestamps | `uuid` v4 + `chrono` |
-| Tracing | `tracing` + `tracing-subscriber` |
+| Layer | Technology / Library | Purpose |
+|-------|----------------------|---------|
+| **HTTP Server** | `axum` v0.7 | High-performance asynchronous web routing and WebSocket handlers |
+| **Async Runtime** | `tokio` v1 | Multi-threaded task spawning, timers, channels, and event loop management |
+| **Shared State** | `dashmap` | Lock-free concurrent hashmap for holding thread-safe real-time state |
+| **Serialization** | `borsh` v1 + `serde` | Zero-copy high-speed binary protocols (Borsh) + robust JSON APIs (Serde) |
+| **Database Engine** | `rusqlite` + `tokio-rusqlite` | Embedded SQLite engine for storing historical trade logs and decisions |
+| **Network Clients** | `reqwest` | Asynchronous client for signed, authenticated exchange REST APIs |
+| **Diagnostics** | `tracing` + `tracing-subscriber` | Structured application logging, metrics collection, and tracing layers |
+| **Identifiers & Time**| `uuid` v4 + `chrono` | Cryptographically secure unique IDs and nanosecond-precision clocks |
 
 ### Frontend (TypeScript)
-| Layer | Technology |
-|-------|-----------|
-| Framework | React 18 + Vite |
-| State | Jotai (atomic, zero re-render overhead) |
-| Styling | TailwindCSS (glassmorphic dark theme) |
-| OrderBook Rendering | Canvas 2D API via Web Worker (zero-copy transferable buffers) |
-| Wire Protocol | Borsh binary deserialization in Worker thread |
+| Layer | Technology / Library | Purpose |
+|-------|----------------------|---------|
+| **Framework** | React 18 + Vite | Modular UI component design and modern high-speed development server |
+| **State Management** | Jotai (atomic) | Fast, zero re-render state atoms avoiding virtual DOM overhead |
+| **Styling Engine** | TailwindCSS | Glassmorphic, modern responsive dark-theme design system |
+| **Charting Engine** | `lightweight-charts` | High-fidelity canvas-based interactive trade charting |
+| **OrderBook Renderer**| HTML5 Canvas API | High-speed order book rendering running directly inside a Web Worker |
+| **Wire Protocol** | Borsh (JS/TS) | Native binary deserialization of backend updates inside Worker threads |
+| **Utility Suite** | `tailwind-merge` + `clsx` | Dynamic merging and conditional application of CSS selectors |
+
 
 ---
 
@@ -108,33 +169,40 @@ NGINX is configured with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Or
 
 ---
 
+## Dual-Model LLM Isolation Architecture
+
+To ensure high availability, zero latency-related blocks on trading execution, and bulletproof safety, TREDO uses a **Dual-Model Local/Cloud Split**:
+
+1. **Local Ollama Model (`nemotron-3-nano:4b`)**:
+   - Used for all standard, fast-path execution sub-agents in the 5-Bot Swarm (Technician Alpha, Portfolio Steward, Market Scout, Sentiment Oracle).
+   - Allows fully private, local, and rate-limit-free real-time calculations.
+2. **Cloud Gemini Model (`gemini-2.5-flash`)**:
+   - Used exclusively for high-grade strategic reasoning, safety-critical assessments, and webhook validations.
+   - Powers the **Risk Sentinel** (`risk_01`), the **Nethra Swarm Coordinator** strategic summaries, and the **cTrading Webhook Safety Lock** confirmations.
+
+---
+
 ## Running Locally
 
 ### Prerequisites
 - Rust `>=1.82` (`rustup update`)
 - Node.js `>=18`
-- Ollama (for local LLM inference): `ollama pull qwen3.5:0.8b`
+- Ollama (for local LLM inference): `ollama pull nemotron-3-nano:4b`
 
 ### 1. Start the Backend
 ```bash
-cd /home/varma/Hermes/Sethu/arkm
-cargo run -p arkm-server
+# From the project root
+cargo run -p tredo-server
 # Listening on http://0.0.0.0:8080
 ```
 
 ### 2. Start the Frontend
 ```bash
-cd /home/varma/Hermes/Sethu/arkm/frontend
+# From the project root
+cd frontend
 npm install
 npm run dev
 # Serving on http://localhost:3000
-```
-
-### 3. Production (Docker)
-```bash
-cd /home/varma/Hermes/Sethu/arkm
-docker-compose up --build
-# NGINX on :80, backend on :8080 (internal)
 ```
 
 ---
@@ -144,16 +212,18 @@ docker-compose up --build
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | System health check |
-| `GET` | `/api/state` | Active positions and balances |
-| `POST` | `/api/chat` | Send prompt to IntelligencePool |
-| `POST` | `/api/override` | Manual trade override (bypass agent) |
-| `WS` | `/ws` | Live Level 2 orderbook binary stream |
+| `GET` | `/api/autotrade/status` | Current auto-trading loop active configuration and status |
+| `POST` | `/api/autotrade/start` | Start the autonomous background trading loop |
+| `POST` | `/api/autotrade/stop` | Pause the autonomous background trading loop |
+| `GET` | `/api/journal/stats` | Retrieve SQLite-persisted trade performance metrics |
+| `POST` | `/api/webhook/google-trading` | cTrading HFT Webhook endpoint with high-grade Gemini safety lock confirmation |
+| `WS` | `/ws` | Live Level 2 orderbook, decisions, and system alerts WS stream |
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and configure your settings:
 
 ```bash
 cp .env.example .env
@@ -163,37 +233,67 @@ cp .env.example .env
 |----------|-------------|
 | `PORT` | HTTP server port (default: `8080`) |
 | `OLLAMA_BASE_URL` | Local Ollama endpoint (default: `http://localhost:11434`) |
-| `DEFAULT_MODEL` | Active LLM model name (e.g., `qwen3.5:0.8b`) |
-| `DATABASE_URL` | SQLite or Postgres connection string |
+| `DEFAULT_MODEL` | Active local LLM model name (default: `nemotron-3-nano:4b`) |
+| `DATABASE_URL` | SQLite or Postgres connection string (default: `sqlite://tredo.db`) |
 | `BINANCE_API_KEY` | Binance exchange API key |
 | `BINANCE_SECRET_KEY` | Binance exchange secret |
 | `KUCOIN_API_KEY` | KuCoin exchange API key |
 | `KUCOIN_SECRET_KEY` | KuCoin exchange secret |
+| `GEMINI_API_KEY` | Google Gemini Cloud API key (for safety verification locks & risk assessing) |
 
 ---
 
 ## Workspace Crate Reference
 
+The TREDO workspace consists of 12 modular Rust crates:
+
 | Crate | Path | Role |
 |-------|------|------|
-| `arkm-types` | `crates/arkm-types` | Shared structs, enums, command types |
-| `arkm-core` | `crates/arkm-core` | Re-exports shared primitives |
-| `arkm-execution` | `crates/arkm-execution` | Fast-path order execution actor |
-| `arkm-intelligence` | `crates/arkm-intelligence` | Semaphore-gated LLM pool |
-| `arkm-exchange` | `crates/arkm-exchange` | Binance + KuCoin WS adapters |
-| `arkm-tantra` | `crates/arkm-tantra` | Alerts + systems monitoring |
-| `arkm-server` | `backend/` | Axum HTTP + WebSocket server binary |
+| `tredo-types` | `crates/tredo-types` | Shared structural primitives, state representations, and command sets |
+| `tredo-core` | `crates/tredo-core` | Re-exports core structures and types |
+| `tredo-skills` | `crates/tredo-skills` | Consolidates the **30+ native technical, risk, and portfolio analysis indicators** |
+| `tredo-intelligence` | `crates/tredo-intelligence` | Handles the semaphore-gated LLM orchestration pool |
+| `tredo-bridge` | `crates/tredo-bridge` | Facilitates bidirectional Redis pub/sub discovery with external Python bridges |
+| `tredo-swarm` | `crates/tredo-swarm` | Orchestrates the multi-turn cooperative **5-Bot Swarm** |
+| `tredo-autotrader` | `crates/tredo-autotrader` | Runs background autonomous execution and analysis loops |
+| `tredo-data` | `crates/tredo-data` | High-fidelity market data handlers (e.g. YahooFinance API) |
+| `tredo-learning` | `crates/tredo-learning` | Tracks win-rates and optimizes indicator conviction/thresholds |
+| `tredo-stream` | `crates/tredo-stream` | Multi-threaded WebSocket broadcasting network registry |
+| `tredo-execution` | `crates/tredo-execution` | Fast-path optimistic accounting and exchange order routers |
+| `tredo-tantra` | `crates/tredo-tantra` | System alerts, security validations, and calendar risk guardians |
+| `tredo-mcp` | `crates/tredo-mcp` | Model Context Protocol SSE handler and agent tools bridge |
+| `tredo-server` | `backend/` | Axum HTTP server and central workspace initialization binary |
+
+---
+
+## Testing Suite
+
+TREDO maintains rigorous unit and integration testing pipelines across both back and front ends.
+
+### 1. Backend Rust Integration Tests
+To execute backend database, REST, journal, and loop integration test blocks:
+```bash
+cargo test --test tredo_integration
+```
+
+### 2. Frontend React/Jotai Unit Tests
+To run all client component, atomic state, and simulated trade feed mock tests:
+```bash
+cd frontend
+npm run test
+```
 
 ---
 
 ## Build Status
 
 ```
-✅ cargo check — 0 errors, 0 warnings
-✅ All 7 workspace crates compile successfully
-✅ Frontend TypeScript config verified
+✅ cargo check — 0 errors, 0 warnings (100% clean)
+✅ All 13 workspace crates compile successfully
+✅ Frontend Vite build compilation verified
 ```
 
 ---
 
-*ARKM is part of the Hermes autonomous intelligence ecosystem.*
+*TREDO is part of the Nethra autonomous intelligence ecosystem.*
+

@@ -1,0 +1,3 @@
+Role: Tredo Executor
+Directive: Execute market transactions across Binance & KuCoin API endpoints. Parse order status, track slippage, and monitor webhook pipelines.
+Model Context: nemotron-3-nano:4b (Local)

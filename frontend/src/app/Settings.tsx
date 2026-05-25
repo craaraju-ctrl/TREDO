@@ -15,11 +15,28 @@ import {
   SettingsPrompt,
   SettingsTool,
 } from '../atoms/state';
+import JournalSection from '../components/settings/JournalSection';
 
-type SettingsTab = 'models' | 'api-keys' | 'agents' | 'skills' | 'prompts' | 'tools';
+type SettingsTab =
+  | 'overview'
+  | 'trades'
+  | 'decisions'
+  | 'strategies'
+  | 'tasks'
+  | 'jobs'
+  | 'calendar'
+  | 'schedule'
+  | 'alerts'
+  | 'models'
+  | 'api-keys'
+  | 'agents'
+  | 'skills'
+  | 'prompts'
+  | 'tools'
+  | 'connection';
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState<SettingsTab>('models');
+  const [activeSection, setActiveSection] = useState<SettingsTab>('overview');
 
   const [models, setModels] = useAtom(settingsModelsAtom);
   const [apiKeys, setApiKeys] = useAtom(settingsApiKeysAtom);
@@ -29,27 +46,58 @@ export default function Settings() {
   const [tools, setTools] = useAtom(settingsToolsAtom);
   const [availableSkills] = useAtom(availableSkillsAtom);
 
-  const tabs: { id: SettingsTab; label: string; icon: string }[] = [
+  const auditTabs: { id: SettingsTab; label: string; icon: string }[] = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'trades', label: 'Trades', icon: '💰' },
+    { id: 'decisions', label: 'Decisions', icon: '🧠' },
+    { id: 'strategies', label: 'Strategies', icon: '📈' },
+    { id: 'tasks', label: 'Tasks', icon: '✅' },
+    { id: 'jobs', label: 'Jobs', icon: '⚡' },
+    { id: 'calendar', label: 'Calendar', icon: '📅' },
+    { id: 'schedule', label: 'Schedule', icon: '⏰' },
+    { id: 'alerts', label: 'Alerts', icon: '🔔' },
+  ];
+
+  const configTabs: { id: SettingsTab; label: string; icon: string }[] = [
     { id: 'models', label: 'Models', icon: '🧠' },
     { id: 'api-keys', label: 'API Keys', icon: '🔑' },
     { id: 'agents', label: 'Agents', icon: '🤖' },
     { id: 'skills', label: 'Skills', icon: '⚡' },
     { id: 'prompts', label: 'Prompts', icon: '📝' },
     { id: 'tools', label: 'Tools', icon: '🔧' },
+    { id: 'connection', label: 'Connection', icon: '🌐' },
   ];
+
+  const isJournalTab = auditTabs.some((t) => t.id === activeSection);
 
   return (
     <div className="flex h-full gap-6">
       {/* Left sidebar — settings navigation */}
-      <div className="w-56 flex flex-col gap-2 pr-2 border-r border-cyber-border/40">
-        <h2 className="text-xs font-bold font-mono tracking-wider text-slate-400 mb-3 px-2">SETTINGS</h2>
-        {tabs.map((tab) => (
+      <div className="w-56 flex flex-col gap-1 pr-2 border-r border-cyber-border/40 shrink-0 overflow-y-auto scrollbar-cyber">
+        <h2 className="text-[9px] font-bold font-mono tracking-widest text-slate-500 mb-2 px-2 uppercase">PERFORMANCE & AUDIT</h2>
+        {auditTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveSection(tab.id)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-mono transition-all duration-200 ${
               activeSection === tab.id
-                ? 'bg-cyber-purple/20 border border-cyber-purple/40 text-cyber-purple'
+                ? 'bg-cyber-purple/20 border border-cyber-purple/40 text-cyber-purple shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-cyber-panel/30'
+            }`}
+          >
+            <span className="text-sm">{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+
+        <h2 className="text-[9px] font-bold font-mono tracking-widest text-slate-500 my-3 px-2 uppercase border-t border-cyber-border/20 pt-3">SYSTEM CONFIGURATION</h2>
+        {configTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSection(tab.id)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-mono transition-all duration-200 ${
+              activeSection === tab.id
+                ? 'bg-cyber-purple/20 border border-cyber-purple/40 text-cyber-purple shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-cyber-panel/30'
             }`}
           >
@@ -60,7 +108,10 @@ export default function Settings() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 overflow-y-auto pr-4">
+      <div className="flex-1 overflow-y-auto pr-4 scrollbar-cyber">
+        {isJournalTab && (
+          <JournalSection activeTab={activeSection as any} />
+        )}
         {activeSection === 'models' && (
           <SettingsModelsSection models={models} setModels={setModels} />
         )}
@@ -83,6 +134,9 @@ export default function Settings() {
         {activeSection === 'tools' && (
           <SettingsToolsSection tools={tools} setTools={setTools} />
         )}
+        {activeSection === 'connection' && (
+          <SettingsConnectionSection />
+        )}
       </div>
     </div>
   );
@@ -97,6 +151,8 @@ function SettingsModelsSection({
   models: SettingsModel[];
   setModels: (m: SettingsModel[]) => void;
 }) {
+  const [modelFilter, setModelFilter] = useState<'all' | 'cloud' | 'local'>('all');
+
   const addModel = () => {
     const newModel: SettingsModel = {
       id: `model-${Date.now()}`,
@@ -108,6 +164,7 @@ function SettingsModelsSection({
       active: false,
       max_tokens: 4096,
       temperature: 0.7,
+      category: 'local',
     };
     setModels([...models, newModel]);
     saveSettings('models', [...models, newModel]);
@@ -125,16 +182,41 @@ function SettingsModelsSection({
 
   return (
     <SectionWrapper title="AI Models" description="Configure LLM providers and model endpoints">
+      {/* Cloud / Local filter tabs */}
+      <div className="flex gap-2 mb-4">
+        {(['all', 'cloud', 'local'] as const).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setModelFilter(cat)}
+            className={`text-[10px] font-bold font-mono px-3 py-1 rounded border transition-all ${
+              modelFilter === cat
+                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/40'
+                : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            {cat === 'all' ? 'ALL' : cat === 'cloud' ? '☁️ CLOUD' : '💻 LOCAL'}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-3">
-        {models.map((model) => (
+        {models.filter(m => modelFilter === 'all' || m.category === modelFilter).map((model) => (
           <div key={model.id} className="bg-cyber-dark/40 border border-cyber-border/40 rounded-xl p-4 space-y-3">
             <div className="flex justify-between items-center">
-              <input
-                type="text"
-                value={model.name}
-                onChange={(e) => updateModel(model.id, { name: e.target.value })}
-                className="bg-transparent border-b border-cyber-border/40 text-slate-200 font-bold font-mono text-xs px-2 py-1 focus:outline-none focus:border-cyber-purple"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={model.name}
+                  onChange={(e) => updateModel(model.id, { name: e.target.value })}
+                  className="bg-transparent border-b border-cyber-border/40 text-slate-200 font-bold font-mono text-xs px-2 py-1 focus:outline-none focus:border-cyber-purple"
+                />
+                {/* Category badge */}
+                <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono border ${
+                  model.category === 'cloud' ? 'bg-cyber-purple/10 text-cyber-purple border-cyber-purple/30' : 'bg-cyber-green/10 text-cyber-green border-cyber-green/30'
+                }`}>
+                  {model.category === 'cloud' ? '☁️ CLOUD' : '💻 LOCAL'}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${model.active ? 'bg-cyber-green' : 'bg-slate-500'}`} />
                 <button onClick={() => updateModel(model.id, { active: !model.active })}
@@ -159,6 +241,31 @@ function SettingsModelsSection({
                   <option value="anthropic">Anthropic</option>
                   <option value="custom">Custom</option>
                 </select>
+              </div>
+              <div>
+                <label className="text-slate-500 block mb-1">Category</label>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={() => updateModel(model.id, { category: 'cloud' })}
+                    className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold font-mono border transition-all ${
+                      model.category === 'cloud'
+                        ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/40'
+                        : 'bg-cyber-dark text-slate-500 border-cyber-border/40 hover:text-slate-300'
+                    }`}
+                  >
+                    ☁️ Cloud
+                  </button>
+                  <button
+                    onClick={() => updateModel(model.id, { category: 'local' })}
+                    className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold font-mono border transition-all ${
+                      model.category === 'local'
+                        ? 'bg-cyber-green/20 text-cyber-green border-cyber-green/40'
+                        : 'bg-cyber-dark text-slate-500 border-cyber-border/40 hover:text-slate-300'
+                    }`}
+                  >
+                    💻 Local
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="text-slate-500 block mb-1">Model Name</label>
@@ -210,12 +317,15 @@ function SettingsApiKeysSection({
   apiKeys: SettingsApiKey[];
   setApiKeys: (k: SettingsApiKey[]) => void;
 }) {
+  const [apiKeyFilter, setApiKeyFilter] = useState<'all' | 'exchange' | 'news' | 'ai'>('all');
+
   const addKey = () => {
     const newKey: SettingsApiKey = {
       id: `key-${Date.now()}`,
       service: 'new-service',
       key: '',
       active: false,
+      category: 'ai',
     };
     setApiKeys([...apiKeys, newKey]);
     saveSettings('api_keys', [...apiKeys, newKey]);
@@ -233,18 +343,56 @@ function SettingsApiKeysSection({
 
   return (
     <SectionWrapper title="API Keys" description="Manage API keys for external services">
+      {/* Filter tabs */}
+      <div className="flex gap-2 mb-4">
+        {(['all', 'exchange', 'news', 'ai'] as const).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setApiKeyFilter(cat)}
+            className={`text-[10px] font-bold font-mono px-3 py-1 rounded border transition-all ${
+              apiKeyFilter === cat
+                ? 'bg-cyber-purple/20 text-cyber-purple border-cyber-purple/40'
+                : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            {cat === 'all' ? 'ALL' : cat.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-3">
-        {apiKeys.map((key) => (
+        {apiKeys.filter(k => apiKeyFilter === 'all' || k.category === apiKeyFilter).map((key) => (
           <div key={key.id} className="bg-cyber-dark/40 border border-cyber-border/40 rounded-xl p-4 flex items-center gap-4">
             <div className="flex-1 space-y-2">
-              <input type="text" value={key.service}
-                onChange={(e) => updateKey(key.id, { service: e.target.value })}
-                className="bg-transparent border-b border-cyber-border/40 text-slate-300 font-mono text-xs px-2 py-1 focus:outline-none focus:border-cyber-purple w-full"
-                placeholder="Service name (e.g., gemini, openai, binance)" />
-              <input type="password" value={key.key}
-                onChange={(e) => updateKey(key.id, { key: e.target.value })}
-                className="w-full bg-cyber-dark border border-cyber-border/40 rounded px-2 py-1.5 text-slate-300 font-mono text-[10px] focus:outline-none focus:border-cyber-purple"
-                placeholder="API Key (stored locally, never sent to cloud)" />
+              <div className="flex items-center gap-2">
+                <input type="text" value={key.service}
+                  onChange={(e) => updateKey(key.id, { service: e.target.value })}
+                  className="bg-transparent border-b border-cyber-border/40 text-slate-300 font-mono text-xs px-2 py-1 focus:outline-none focus:border-cyber-purple flex-1"
+                  placeholder="Service name (e.g., gemini, openai, binance)" />
+                {/* Category badge */}
+                <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono border ${
+                  key.category === 'exchange' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                  key.category === 'news' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' :
+                  'bg-cyber-purple/10 text-cyber-purple border-cyber-purple/30'
+                }`}>
+                  {key.category === 'exchange' ? '📊 EXCHANGE' : key.category === 'news' ? '📰 NEWS' : '🤖 AI'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <input type="password" value={key.key}
+                  onChange={(e) => updateKey(key.id, { key: e.target.value })}
+                  className="flex-1 bg-cyber-dark border border-cyber-border/40 rounded px-2 py-1.5 text-slate-300 font-mono text-[10px] focus:outline-none focus:border-cyber-purple"
+                  placeholder="API Key (stored locally, never sent to cloud)" />
+                <select
+                  value={key.category}
+                  onChange={(e) => updateKey(key.id, { category: e.target.value as any })}
+                  className="bg-cyber-dark border border-cyber-border/40 rounded px-1.5 py-1 text-[9px] font-mono text-slate-300 focus:outline-none focus:border-cyber-purple"
+                >
+                  <option value="exchange">Exchange</option>
+                  <option value="news">News</option>
+                  <option value="ai">AI</option>
+                </select>
+              </div>
             </div>
             <button onClick={() => updateKey(key.id, { active: !key.active })}
               className={`px-2.5 py-1 rounded text-[9px] font-mono border ${
@@ -596,7 +744,7 @@ function SettingsToolsSection({
 
 function saveSettings(key: string, data: any) {
   try {
-    localStorage.setItem(`arkm_settings_${key}`, JSON.stringify(data));
+    localStorage.setItem(`tredo_settings_${key}`, JSON.stringify(data));
   } catch {
     // localStorage may not be available
   }
@@ -621,5 +769,55 @@ function SectionWrapper({
       </div>
       {children}
     </div>
+  );
+}
+
+// ── Connection Section ──────────────────────────────────────────────────
+
+function SettingsConnectionSection() {
+  const [apiBaseUrl, setApiBaseUrl] = useState(() => {
+    try {
+      const stored = localStorage.getItem('tredo_settings_api_base_url');
+      return stored ? JSON.parse(stored) : '';
+    } catch {
+      return '';
+    }
+  });
+
+  const saveUrl = (val: string) => {
+    setApiBaseUrl(val);
+    try {
+      localStorage.setItem('tredo_settings_api_base_url', JSON.stringify(val));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  return (
+    <SectionWrapper title="Backend Connection" description="Configure the API host address for remote client orchestration">
+      <div className="bg-cyber-dark/40 border border-cyber-border/40 rounded-xl p-5 space-y-4">
+        <div>
+          <label className="text-slate-400 block mb-2 font-mono text-[10px]">BACKEND API BASE URL</label>
+          <input
+            type="text"
+            value={apiBaseUrl}
+            onChange={(e) => saveUrl(e.target.value)}
+            className="w-full bg-cyber-dark border border-cyber-border/40 rounded-lg px-3 py-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyber-purple transition-all font-mono"
+            placeholder="e.g. http://192.168.1.5:8080 or http://10.0.2.2:8080"
+          />
+          <p className="text-[9px] font-mono text-slate-500 mt-2 leading-relaxed">
+            Leave blank to use relative paths (default for local desktop web browser). 
+            For Android builds, configure this to your backend server's local IP address (e.g. <code className="text-cyber-purple bg-cyber-purple/10 px-1 rounded font-mono">http://192.168.1.15:8080</code>) or standard emulator loopback endpoint (<code className="text-cyber-purple bg-cyber-purple/10 px-1 rounded font-mono">http://10.0.2.2:8080</code>).
+          </p>
+        </div>
+        
+        <div className="border-t border-cyber-border/20 pt-4 flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-cyber-green animate-pulse" />
+          <span className="text-[9px] font-mono text-slate-400">
+            Transparent relative request rewrite engine active
+          </span>
+        </div>
+      </div>
+    </SectionWrapper>
   );
 }

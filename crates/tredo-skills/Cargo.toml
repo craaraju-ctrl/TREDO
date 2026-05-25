@@ -1,0 +1,15 @@
+[package]
+name = "tredo-skills"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true, features = ["sync"] }
+tredo-types = { path = "../tredo-types" }
+tredo-core = { path = "../tredo-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+futures = "0.3"

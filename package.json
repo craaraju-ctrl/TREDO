@@ -1,18 +1,32 @@
 {
-  "name": "arkm",
+  "name": "tredo",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@10.9.7",
   "workspaces": [
     "frontend"
   ],
   "scripts": {
-    "dev:frontend": "turbo run dev --filter=frontend",
-    "build:frontend": "turbo run build --filter=frontend",
-    "build:backend": "cargo build --release --manifest-path backend/Cargo.toml",
-    "dev:backend": "cargo run --manifest-path backend/Cargo.toml",
+    "// --- Backend API ---": "",
+    "backend:dev": "cargo run --manifest-path backend/Cargo.toml",
+    "backend:build": "cargo build --release --manifest-path backend/Cargo.toml",
+    "// --- Web Application ---": "",
+    "web:dev": "turbo run dev --filter=frontend",
+    "web:build": "turbo run build --filter=frontend",
+    "// --- Android Platform ---": "",
+    "android:setup": "cd frontend && npx cap init \"TREDO Cockpit\" \"com.tredo.cockpit\"",
+    "android:add": "npm run web:build && cd frontend && npx cap add android",
+    "android:build": "npm run web:build && cd frontend && npx cap sync",
+    "android:open": "cd frontend && npx cap open android",
+    "// --- Ubuntu Desktop Platform ---": "",
+    "desktop:run": "cd frontend && npm run desktop:dev",
+    "desktop:build:ubuntu": "npm run web:build && cd frontend && npm run desktop:build:linux",
+    "// --- Mac Mini M1 Desktop Platform ---": "",
+    "desktop:build:mac-m1": "npm run web:build && cd frontend && npm run desktop:build:mac",
+    "// --- General QA Commands ---": "",
     "check": "turbo run lint && cargo check --manifest-path backend/Cargo.toml"
   },
   "devDependencies": {
-    "turbo": "^1.13.4"
+    "turbo": "^2.9.14"
   }
 }

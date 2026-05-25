@@ -1,0 +1,34 @@
+[package]
+name = "tredo-mcp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rmcp = { version = "1.7", features = [
+    "server",
+    "macros",
+    "schemars",
+    "transport-streamable-http-server",
+    "transport-io",
+    "uuid",
+] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+futures = "0.3"
+schemars = "1.0"
+
+# Internal crates
+tredo-core = { path = "../tredo-core" }
+tredo-types = { path = "../tredo-types" }
+tredo-intelligence = { path = "../tredo-intelligence" }
+tredo-data = { path = "../tredo-data" }
+tredo-journal = { path = "../tredo-journal" }
+tredo-autotrader = { path = "../tredo-autotrader" }
+tredo-bridge = { path = "../tredo-bridge" }
+tredo-tantra = { path = "../tredo-tantra" }
+tredo-learning = { path = "../tredo-learning" }
+tredo-stream = { path = "../tredo-stream" }
