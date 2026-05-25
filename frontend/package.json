@@ -40,17 +40,17 @@
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.14",
-    "electron": "^30.0.0",
+    "electron": "^31.0.0",
     "electron-builder": "^24.13.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.4.24",
     "tailwindcss": "^3.3.2",
     "typescript": "^5.0.2",
-    "vite": "^4.3.9",
+    "vite": "^5.4.15",
     "vitest": "^4.1.7"
   },
   "build": {
-    "electronVersion": "30.0.0",
+    "electronVersion": "31.0.0",
     "appId": "com.tredo.cockpit",
     "productName": "TREDO Cockpit",
     "directories": {
