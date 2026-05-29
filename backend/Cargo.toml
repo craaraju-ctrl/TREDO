@@ -30,6 +30,9 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 rmcp = { version = "1.7", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
 
+# Security
+jsonwebtoken = "9.3"
+
 # Internal crates
 tredo-core      = { path = "../crates/tredo-core" }
 tredo-types      = { path = "../crates/tredo-types" }
